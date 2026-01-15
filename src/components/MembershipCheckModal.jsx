@@ -59,26 +59,20 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
         setLoading(true);
         setError('');
         try {
-            // 1. Check users table
-            const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select('id, role')
-                .eq('phone', searchTerm)
-                .single();
-
-            if (userError || !userData) {
-                throw new Error('Data tidak ditemukan. Silakan hubungi admin untuk pendaftaran.');
-            }
-
-            // 2. Fetch personal_data linked to this user
+            // 1. Check personal_data table directly for NPP
             const { data: profileData, error: profileError } = await supabase
                 .from('personal_data')
                 .select('*')
-                .eq('user_id', userData.id)
+                .eq('no_npp', searchTerm)
                 .single();
 
             if (profileError || !profileData) {
-                throw new Error('Data profil Anda belum lengkap. Silakan hubungi admin.');
+                throw new Error('Data NPP tidak ditemukan. Silakan hubungi admin untuk pendaftaran.');
+            }
+
+            // 2. We already have the profileData, now ensure it has a user_id if we want to update password
+            if (!profileData.user_id) {
+                throw new Error('Data user belum terintegrasi. Silakan hubungi admin.');
             }
 
             if (profileData.status === 'active') {
@@ -218,10 +212,10 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
             }
 
             // 2. Upload signature
-            const signatureUrl = await uploadFile(signature, 'signatures', `sig_${member.nik || member.phone}`);
+            const signatureUrl = await uploadFile(signature, 'signatures', `sig_${member.no_npp || member.nik}`);
 
             // 3. Upload photo
-            const photoUrl = await uploadFile(photoFile, 'photos', `photo_${member.nik || member.phone}`);
+            const photoUrl = await uploadFile(photoFile, 'photos', `photo_${member.no_npp || member.nik}`);
 
             // 4. Update database personal_data
             const { error } = await supabase
@@ -257,7 +251,7 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
                         <X size={24} />
                     </button>
                     <h2 className="text-xl md:text-2xl font-bold italic uppercase tracking-tight">Cek Keanggotaan</h2>
-                    <p className="text-blue-300 text-xs md:text-sm mt-1 italic font-medium">Verifikasi data Anda untuk pengaktifan akun</p>
+                    <p className="text-blue-300 text-xs md:text-sm mt-1 italic font-medium">Verifikasi data Anda menggunakan NPP</p>
                 </div>
 
                 <div className="p-8 flex-1 overflow-y-auto">
@@ -265,16 +259,16 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
                         <div className="space-y-6">
                             <form onSubmit={handleSearch} className="space-y-4">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Masukkan Nomor HP Anda</label>
+                                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Masukkan Nomor NPP Anda</label>
                                     <div className="relative">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                                         <input
                                             required
-                                            type="tel"
+                                            type="text"
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                             className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-bold italic"
-                                            placeholder="Contoh: 08123456789"
+                                            placeholder="Contoh: 12345678"
                                         />
                                     </div>
                                 </div>
@@ -295,7 +289,7 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
 
                             <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 italic space-y-2">
                                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Informasi:</p>
-                                <p className="text-xs font-bold text-gray-600">Pastikan Nomor HP Anda sudah didaftarkan oleh admin koperasi sebelum melakukan pengecekan.</p>
+                                <p className="text-xs font-bold text-gray-600">Pastikan Nomor NPP Anda sudah didaftarkan oleh admin koperasi sebelum melakukan pengecekan.</p>
                             </div>
                         </div>
                     ) : (
@@ -320,7 +314,7 @@ const MembershipCheckModal = ({ isOpen, onClose }) => {
                                         <User size={56} strokeWidth={3} />
                                     </div>
                                     <h3 className="text-2xl font-black uppercase text-gray-900 italic tracking-tight">Keanggotaan Aktif!</h3>
-                                    <p className="text-sm font-bold text-gray-500 max-w-xs mx-auto leading-relaxed italic">Selamat! Akun Anda sudah aktif. Silakan login menggunakan Nomor HP Anda.</p>
+                                    <p className="text-sm font-bold text-gray-500 max-w-xs mx-auto leading-relaxed italic">Selamat! Akun Anda sudah aktif. Silakan login menggunakan Nomor NPP Anda.</p>
                                     <button
                                         onClick={() => setMember(null)}
                                         className="mt-8 px-8 py-3 rounded-2xl border border-gray-200 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-all"

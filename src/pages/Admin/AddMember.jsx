@@ -25,21 +25,19 @@ const AddMember = () => {
     };
 
     const handleExcelSave = async (data) => {
-        // This is called by AddMemberExcel for EACH row.
-        // It does not handle navigation or alerting for the batch, that's handled in AddMemberExcel.
         await saveMember(data);
     };
 
     const saveMember = async (data) => {
         // 1. Create/Find User
         let userId = null;
-        const primaryPhone = data.hp_1 || data.no_ktp; // Fallback to KTP if no phone? Better to require phone.
+        const loginIdentifier = data.no_npp; // Use NPP for login identifier
 
-        if (primaryPhone) {
+        if (loginIdentifier) {
             const { data: existingUser } = await supabase
                 .from('users')
                 .select('id')
-                .eq('phone', primaryPhone)
+                .eq('phone', loginIdentifier)
                 .single();
 
             if (existingUser) {
@@ -48,7 +46,7 @@ const AddMember = () => {
                 const { data: newUser, error: userError } = await supabase
                     .from('users')
                     .insert({
-                        phone: primaryPhone,
+                        phone: loginIdentifier,
                         email: data.email || null,
                         password: 'placeholder-password',
                         role: 'MEMBER'

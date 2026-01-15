@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
-import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Info } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Info, Download, Filter } from 'lucide-react';
+import { exportMonitoringSimpanan } from '../../utils/reportExcel';
+import { useEffect } from 'react';
 
 const UploadSimpanan = () => {
     const [file, setFile] = useState(null);
@@ -13,6 +15,80 @@ const UploadSimpanan = () => {
         const d = new Date();
         return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().substring(0, 7);
     });
+    const [selectedPT, setSelectedPT] = useState('ALL');
+    const [companies, setCompanies] = useState([]);
+    const [memberCount, setMemberCount] = useState(0);
+
+    useEffect(() => {
+        fetchCompanies();
+    }, []);
+
+    useEffect(() => {
+        if (selectedPT !== 'ALL') {
+            fetchMemberCount();
+        } else {
+            setMemberCount(0);
+        }
+    }, [selectedPT]);
+
+    const fetchMemberCount = async () => {
+        try {
+            const { count, error } = await supabase
+                .from('personal_data')
+                .select('*', { count: 'exact', head: true })
+                .eq('company', selectedPT)
+                .eq('status', 'active');
+
+            if (error) throw error;
+            setMemberCount(count || 0);
+        } catch (err) {
+            console.error("Error fetching member count:", err);
+        }
+    };
+
+    const fetchCompanies = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('master_data')
+                .select('value')
+                .eq('category', 'company')
+                .order('value', { ascending: true });
+            if (error) throw error;
+            setCompanies(data?.map(c => c.value) || []);
+        } catch (err) {
+            console.error("Error fetching companies:", err);
+        }
+    };
+
+    const handleExportTemplate = async () => {
+        if (selectedPT === 'ALL') {
+            alert('Silakan pilih PT terlebih dahulu untuk mengunduh template');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const { data: members, error } = await supabase
+                .from('personal_data')
+                .select('nik, full_name')
+                .eq('company', selectedPT)
+                .eq('status', 'active');
+
+            if (error) throw error;
+
+            if (!members || members.length === 0) {
+                alert(`Tidak ada anggota aktif untuk PT ${selectedPT}`);
+                return;
+            }
+
+            exportMonitoringSimpanan(members, {}, 'TEMPLATE');
+        } catch (err) {
+            console.error('Error exporting template:', err);
+            alert('Gagal mengunduh template');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -58,6 +134,7 @@ const UploadSimpanan = () => {
                 const excelNIK = String(row.NIK || row['NIK'] || '').trim();
                 const amountPokok = parseFloat(row['Simpanan Pokok'] || 0);
                 const amountWajib = parseFloat(row['Simpanan Wajib'] || 0);
+                const amountSukarela = parseFloat(row['Simpanan Sukarela'] || 0);
 
                 const match = members.find(m => String(m.nik).trim() === excelNIK);
 
@@ -66,6 +143,7 @@ const UploadSimpanan = () => {
                     dbMatch: match,
                     amountPokok,
                     amountWajib,
+                    amountSukarela,
                     status: match ? 'VALID' : 'INVALID'
                 };
             });
@@ -82,7 +160,7 @@ const UploadSimpanan = () => {
     };
 
     const handleProcessUpload = async () => {
-        const validItems = previewData.filter(r => r.status === 'VALID' && (r.amountPokok > 0 || r.amountWajib > 0));
+        const validItems = previewData.filter(r => r.status === 'VALID' && (r.amountPokok > 0 || r.amountWajib > 0 || r.amountSukarela > 0));
         if (validItems.length === 0) {
             alert('Tidak ada data valid dengan nominal simpanan untuk diproses');
             return;
@@ -123,6 +201,18 @@ const UploadSimpanan = () => {
                         created_at: new Date().toISOString()
                     });
                 }
+                if (item.amountSukarela > 0) {
+                    inserts.push({
+                        personal_data_id: item.dbMatch.id,
+                        type: 'SUKARELA',
+                        amount: item.amountSukarela,
+                        status: 'PAID',
+                        transaction_type: 'SETOR',
+                        bulan_ke: bulanKe,
+                        jatuh_tempo: jatuhTempo,
+                        created_at: new Date().toISOString()
+                    });
+                }
             });
 
             const { error } = await supabase
@@ -150,14 +240,46 @@ const UploadSimpanan = () => {
                     <h2 className="text-3xl font-black text-gray-900 italic uppercase tracking-tight">Bulk Input Simpanan</h2>
                     <p className="text-sm text-gray-500 mt-1 font-medium italic uppercase tracking-wider">Input iuran anggota secara massal via Excel</p>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase italic">Periode Simpanan</label>
-                    <input
-                        type="month"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
-                    />
+                <div className="flex flex-col md:flex-row items-end gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase italic">Pilih Perusahaan (PT)</label>
+                        <div className="relative">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                            <select
+                                value={selectedPT}
+                                onChange={(e) => setSelectedPT(e.target.value)}
+                                className="pl-9 pr-8 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold appearance-none uppercase italic"
+                            >
+                                <option value="ALL">Pilih PT</option>
+                                {companies.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    {selectedPT !== 'ALL' && (
+                        <div className="flex flex-col items-end gap-1 animate-in zoom-in duration-300">
+                            <label className="text-[10px] font-black text-gray-400 uppercase italic">Jumlah Karyawan</label>
+                            <div className="px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl text-sm font-black text-blue-600 italic">
+                                {memberCount} Orang
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex flex-col items-end gap-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase italic">Periode Simpanan</label>
+                        <input
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
+                        />
+                    </div>
+                    <button
+                        onClick={handleExportTemplate}
+                        disabled={loading}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 shadow-lg shadow-blue-100 transition flex items-center gap-2 disabled:opacity-50"
+                    >
+                        {loading && <Loader2 className="animate-spin" size={14} />}
+                        <Download size={14} /> Export Template
+                    </button>
                 </div>
             </div>
 
@@ -251,6 +373,7 @@ const UploadSimpanan = () => {
                                     <th className="px-6 py-4">Nama Anggota</th>
                                     <th className="px-6 py-4 text-right">Simp. Pokok</th>
                                     <th className="px-6 py-4 text-right">Simp. Wajib</th>
+                                    <th className="px-6 py-4 text-right">Simp. Sukarela</th>
                                     <th className="px-6 py-4 text-right">Total</th>
                                 </tr>
                             </thead>
@@ -287,8 +410,13 @@ const UploadSimpanan = () => {
                                             </p>
                                         </td>
                                         <td className="px-6 py-4 text-right">
+                                            <p className="text-sm font-bold text-gray-600 font-mono">
+                                                Rp {(row.amountSukarela || 0).toLocaleString('id-ID')}
+                                            </p>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
                                             <p className="text-sm font-black text-emerald-600 tabular-nums italic font-mono">
-                                                Rp {(row.amountPokok + row.amountWajib).toLocaleString('id-ID')}
+                                                Rp {(row.amountPokok + row.amountWajib + row.amountSukarela).toLocaleString('id-ID')}
                                             </p>
                                         </td>
                                     </tr>

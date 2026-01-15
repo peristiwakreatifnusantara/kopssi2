@@ -11,12 +11,13 @@ const MonitorPinjaman = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().substring(0, 7);
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
     });
-    const [endDate, setEndDate] = useState(() => {
-        const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().substring(0, 7);
-    });
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const pageOptions = [10, 20, 50, 100];
     const [activeTab, setActiveTab] = useState('LOANS'); // 'LOANS' or 'INSTALLMENTS'
     const [updatingId, setUpdatingId] = useState(null);
     const [filterCompany, setFilterCompany] = useState('ALL');
@@ -45,10 +46,8 @@ const MonitorPinjaman = () => {
         try {
             setLoading(true);
 
-            const [sYear, sMonth] = startDate.split('-');
-            const startD = `${sYear}-${sMonth}-01`;
-            const [eYear, eMonth] = endDate.split('-');
-            const endD = new Date(eYear, eMonth, 0).toISOString().split('T')[0];
+            const startD = startDate;
+            const endD = endDate;
 
             // Fetch Loans created in this range
             const { data: loanData, error: loanError } = await supabase
@@ -91,9 +90,8 @@ const MonitorPinjaman = () => {
 
             // Filter installments by month range locally based on created_at or due date if available
             const filteredInst = (instData || []).filter(inst => {
-                const instDate = new Date(inst.created_at);
-                const instMonthPath = instDate.toISOString().substring(0, 7);
-                return instMonthPath >= startDate && instMonthPath <= endDate;
+                const instDate = new Date(inst.created_at).toISOString().split('T')[0];
+                return instDate >= startDate && instDate <= endDate;
             });
 
             setInstallments(filteredInst);
@@ -163,6 +161,15 @@ const MonitorPinjaman = () => {
         return matchesSearch && matchesCompany;
     });
 
+    // Pagination Calculation
+    const activeData = activeTab === 'LOANS' ? filteredLoans : filteredInstallments;
+    const totalPages = Math.ceil(activeData.length / itemsPerPage);
+    const paginatedData = activeData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterCompany, startDate, endDate, activeTab]);
+
     const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
     return (
@@ -186,14 +193,14 @@ const MonitorPinjaman = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <input
-                            type="month"
+                            type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
                             className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white shadow-sm font-bold"
                         />
                         <span className="text-gray-400 font-bold">s/d</span>
                         <input
-                            type="month"
+                            type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
                             className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white shadow-sm font-bold"
@@ -274,7 +281,7 @@ const MonitorPinjaman = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredLoans.map((loan) => (
+                                    paginatedData.map((loan) => (
                                         <tr
                                             key={loan.id}
                                             onClick={() => navigate(`/admin/loan-detail/${loan.id}`)}
@@ -355,7 +362,7 @@ const MonitorPinjaman = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredInstallments.map((inst) => (
+                                    paginatedData.map((inst) => (
                                         <tr key={inst.id} className="hover:bg-emerald-50/20 transition-colors group">
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">
@@ -397,6 +404,49 @@ const MonitorPinjaman = () => {
                             </tbody>
                         </table>
                     )}
+                </div>
+
+                {/* PAGINATION FOOTER */}
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 text-xs font-black text-gray-400 uppercase tracking-widest">
+                        <span>Tampilkan</span>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-emerald-600 shadow-sm"
+                        >
+                            {pageOptions.map(opt => <option key={opt} value={opt}>{opt} Data</option>)}
+                        </select>
+                        <span className="hidden md:block">| Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, activeData.length)} dari {activeData.length} data</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Sebelumnya
+                        </button>
+                        <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === i + 1 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-110' : 'bg-white text-gray-400 hover:bg-gray-50 border border-gray-100'}`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+                        </div>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Berikutnya
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

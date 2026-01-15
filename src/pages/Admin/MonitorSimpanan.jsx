@@ -9,15 +9,17 @@ const MonitorSimpanan = () => {
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().substring(0, 7);
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
     });
-    const [endDate, setEndDate] = useState(() => {
-        const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().substring(0, 7);
-    });
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [filterCompany, setFilterCompany] = useState('ALL');
     const [companies, setCompanies] = useState([]);
     const [showExportMenu, setShowExportMenu] = useState(false);
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const pageOptions = [10, 20, 50, 100];
 
     const fetchCompanies = async () => {
         try {
@@ -42,9 +44,8 @@ const MonitorSimpanan = () => {
         try {
             setLoading(true);
 
-            const start = `${startDate}-01`;
-            const [year, month] = endDate.split('-');
-            const end = new Date(year, month, 0).toISOString().split('T')[0];
+            const start = `${startDate}T00:00:00`;
+            const end = `${endDate}T23:59:59`;
 
             const { data, error } = await supabase
                 .from('simpanan')
@@ -85,6 +86,9 @@ const MonitorSimpanan = () => {
                 }
                 if (item.type === 'WAJIB') {
                     grouped[key].amount_wajib = parseFloat(item.amount || 0);
+                }
+                if (item.type === 'SUKARELA') {
+                    grouped[key].amount_sukarela = parseFloat(item.amount || 0);
                 }
                 grouped[key].items.push(item);
             });
@@ -129,6 +133,14 @@ const MonitorSimpanan = () => {
         return matchesSearch && matchesCompany;
     });
 
+    // Pagination Calculation
+    const totalPages = Math.ceil(filteredBills.length / itemsPerPage);
+    const paginatedBills = filteredBills.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterCompany, startDate, endDate]);
+
     const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
     return (
@@ -151,17 +163,17 @@ const MonitorSimpanan = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <input
-                            type="month"
+                            type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
                         />
                         <span className="text-gray-400 font-bold">s/d</span>
                         <input
-                            type="month"
+                            type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
                         />
                     </div>
                     <div className="relative">
@@ -214,6 +226,7 @@ const MonitorSimpanan = () => {
                                 <th className="px-6 py-4 font-black">Jatuh Tempo</th>
                                 <th className="px-6 py-4 font-black text-right">Simp. Pokok</th>
                                 <th className="px-6 py-4 font-black text-right">Simp. Wajib</th>
+                                <th className="px-6 py-4 font-black text-right">Simp. Sukarela</th>
                                 <th className="px-6 py-4 font-black text-right">Total</th>
                                 <th className="px-6 py-4 font-black text-center">Status</th>
                             </tr>
@@ -234,7 +247,7 @@ const MonitorSimpanan = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredBills.map((bill) => {
+                                paginatedBills.map((bill) => {
                                     const total = parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0);
                                     return (
                                         <tr key={bill.id} className="hover:bg-emerald-50/20 transition-colors group">
@@ -262,9 +275,12 @@ const MonitorSimpanan = () => {
                                             <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
                                                 {formatCurrency(bill.amount_wajib)}
                                             </td>
+                                            <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
+                                                {formatCurrency(bill.amount_sukarela || 0)}
+                                            </td>
                                             <td className="px-6 py-4 text-right">
                                                 <span className="text-sm font-black text-gray-800 font-mono">
-                                                    {formatCurrency(total)}
+                                                    {formatCurrency(parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0) + parseFloat(bill.amount_sukarela || 0))}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
@@ -282,6 +298,49 @@ const MonitorSimpanan = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* PAGINATION FOOTER */}
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 text-xs font-black text-gray-400 uppercase tracking-widest">
+                        <span>Tampilkan</span>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-emerald-600 shadow-sm"
+                        >
+                            {pageOptions.map(opt => <option key={opt} value={opt}>{opt} Data</option>)}
+                        </select>
+                        <span className="hidden md:block">| Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredBills.length)} dari {filteredBills.length} data</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Sebelumnya
+                        </button>
+                        <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === i + 1 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200Scale-110' : 'bg-white text-gray-400 hover:bg-gray-50 border border-gray-100'}`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+                        </div>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Berikutnya
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

@@ -36,15 +36,21 @@ const Transaksi = () => {
         }
     };
 
-    // Default to current month
-    const now = new Date();
-    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const [filterMonth, setFilterMonth] = useState(currentMonthStr);
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const pageOptions = [10, 20, 50, 100];
 
     useEffect(() => {
         fetchAllTransactions();
         fetchCompanies();
-    }, [filterMonth]);
+    }, [startDate, endDate]);
 
     const fetchAllTransactions = async () => {
         try {
@@ -61,6 +67,8 @@ const Transaksi = () => {
                         company
                     )
                 `)
+                .gte('jatuh_tempo', startDate)
+                .lte('jatuh_tempo', endDate)
                 .order('jatuh_tempo', { ascending: false });
 
             if (sError) throw sError;
@@ -79,6 +87,8 @@ const Transaksi = () => {
                         )
                     )
                 `)
+                .gte('tanggal_bayar', `${startDate}T00:00:00`)
+                .lte('tanggal_bayar', `${endDate}T23:59:59`)
                 .order('tanggal_bayar', { ascending: false });
 
             if (aError) throw aError;
@@ -131,18 +141,16 @@ const Transaksi = () => {
         const matchesStatus = filterStatus === 'ALL' || trx.status === filterStatus;
         const matchesCompany = filterCompany === 'ALL' || trx.company === filterCompany;
 
-        // Month filter
-        let matchesMonth = true;
-        if (filterMonth) {
-            const trxDate = new Date(trx.date);
-            const [year, month] = filterMonth.split('-');
-            const trxYear = trxDate.getFullYear();
-            const trxMonth = trxDate.getMonth() + 1;
-            matchesMonth = trxYear === parseInt(year) && trxMonth === parseInt(month);
-        }
-
-        return matchesSearch && matchesStatus && matchesMonth && matchesCompany;
+        return matchesSearch && matchesStatus && matchesCompany;
     });
+
+    // Pagination Calculation
+    const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+    const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterStatus, filterCompany, startDate, endDate]);
 
     const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
     const formatDate = (dateString) => new Date(dateString).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -165,12 +173,21 @@ const Transaksi = () => {
                             className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full md:w-64 text-sm"
                         />
                     </div>
-                    <input
-                        type="month"
-                        value={filterMonth}
-                        onChange={(e) => setFilterMonth(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
-                    />
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
+                        />
+                        <span className="text-gray-400 font-bold">s/d</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
+                        />
+                    </div>
                     <select
                         value={filterCompany}
                         onChange={(e) => setFilterCompany(e.target.value)}
@@ -235,7 +252,7 @@ const Transaksi = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredTransactions.map((trx) => (
+                                paginatedTransactions.map((trx) => (
                                     <tr key={trx.id} className="hover:bg-emerald-50/30 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
@@ -284,6 +301,49 @@ const Transaksi = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* PAGINATION FOOTER */}
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 text-xs font-black text-gray-400 uppercase tracking-widest">
+                        <span>Tampilkan</span>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-emerald-600 shadow-sm"
+                        >
+                            {pageOptions.map(opt => <option key={opt} value={opt}>{opt} Data</option>)}
+                        </select>
+                        <span className="hidden md:block">| Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} dari {filteredTransactions.length} data</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Sebelumnya
+                        </button>
+                        <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === i + 1 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-110' : 'bg-white text-gray-400 hover:bg-gray-50 border border-gray-100'}`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+                        </div>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            Berikutnya
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

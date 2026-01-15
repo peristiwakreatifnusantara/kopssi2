@@ -8,7 +8,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
     const contentRef = useRef(null);
     const formRef = useRef(null);
 
-    const [phone, setPhone] = useState('');
+    const [npp, setNpp] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -51,12 +51,12 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
             const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('id, phone, role')
-                .eq('phone', phone)
+                .eq('phone', npp) // NPP stored in 'phone' column
                 .eq('password', password)
                 .single();
 
             if (userError || !userData) {
-                throw new Error('Nomor HP atau password salah');
+                throw new Error('NPP atau password salah');
             }
 
             // ================= ADMIN =================
@@ -143,7 +143,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
                             <img src="/Logo.png" alt="Logo" className="w-12 h-12 object-contain" />
                         </div>
                         <h2 className="text-2xl font-bold mb-1">Selamat Datang Kembali</h2>
-                        <p className="text-slate-300 text-sm">Silakan masuk ke akun KOPSSI Anda</p>
+                        <p className="text-slate-300 text-sm">Silakan masuk menggunakan NPP Anda</p>
                     </div>
                 </div>
 
@@ -151,17 +151,17 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
                 <div className="p-8">
                     <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 ml-1">Nomor HP</label>
+                            <label className="text-sm font-semibold text-gray-700 ml-1">Nomor NPP</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Phone className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-600 transition-colors" />
                                 </div>
                                 <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
+                                    type="text"
+                                    value={npp}
+                                    onChange={(e) => setNpp(e.target.value)}
                                     className="block w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
-                                    placeholder="Contoh: 08123456789"
+                                    placeholder="Contoh: 12345678"
                                     required
                                 />
                             </div>

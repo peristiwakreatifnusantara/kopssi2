@@ -66,20 +66,21 @@ export const exportMonitoringSimpanan = (data, range, mode = 'DATA') => {
     let filename;
 
     if (mode === 'TEMPLATE') {
-        // Template for bulk upload: NIK, Nama, Simpanan Pokok, Simpanan Wajib
-        headers = [['NIK', 'Nama Lengkap', 'Simpanan Pokok', 'Simpanan Wajib']];
+        // Template for bulk upload: NIK, Nama, Simpanan Pokok, Simpanan Wajib, Simpanan Sukarela
+        headers = [['NIK', 'Nama Lengkap', 'Simpanan Pokok', 'Simpanan Wajib', 'Simpanan Sukarela']];
         rows = data.map(member => [
             member.nik || '-',
             member.full_name || '-',
-            '', // Empty for user to fill
-            ''  // Empty for user to fill
+            0,      // Default Simpanan Pokok
+            75000,  // Default Simpanan Wajib
+            0       // Default Simpanan Sukarela
         ]);
         filename = `Template_Upload_Simpanan_${new Date().toISOString().slice(0, 10)}.xlsx`;
     } else {
         // Columns synchronized with historical view - MUST keep original format
-        headers = [['NIK', 'Nama', 'Referensi', 'Status', 'Bulan Ke', 'Jatuh Tempo', 'Simp. Pokok', 'Simp. Wajib', 'Total']];
+        headers = [['NIK', 'Nama', 'Referensi', 'Status', 'Bulan Ke', 'Jatuh Tempo', 'Simp. Pokok', 'Simp. Wajib', 'Simp. Sukarela', 'Total']];
         rows = data.map(bill => {
-            const total = parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0);
+            const total = parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0) + parseFloat(bill.amount_sukarela || 0);
             return [
                 bill.personal_data?.nik || '-',
                 bill.personal_data?.full_name || '-',
@@ -87,9 +88,10 @@ export const exportMonitoringSimpanan = (data, range, mode = 'DATA') => {
                 bill.status,
                 bill.bulan_ke,
                 bill.jatuh_tempo ? new Date(bill.jatuh_tempo).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-',
-                formatNum(bill.amount_pokok),
-                formatNum(bill.amount_wajib),
-                formatNum(total)
+                bill.amount_pokok || 0,
+                bill.amount_wajib || 0,
+                bill.amount_sukarela || 0,
+                total
             ];
         });
         filename = `Monitoring_Simpanan_${range.startDate}_${range.endDate}.xlsx`;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 import {
     LayoutDashboard,
     Users,
@@ -24,6 +25,7 @@ const AdminLayout = () => {
     const [isSidebarOpen, setSidebarOpen] = useState(true);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [openMenus, setOpenMenus] = useState({});
+    const [pendingCount, setPendingCount] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -93,6 +95,40 @@ const AdminLayout = () => {
         }
     ];
 
+    useEffect(() => {
+        fetchPendingCount();
+
+        // Setup realtime subscription
+        const channel = supabase
+            .channel('personal_data_changes')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'personal_data'
+            }, () => {
+                fetchPendingCount();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const fetchPendingCount = async () => {
+        try {
+            const { count, error } = await supabase
+                .from('personal_data')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'DONE VERIFIKASI');
+
+            if (error) throw error;
+            setPendingCount(count || 0);
+        } catch (err) {
+            console.error('Error fetching pending count:', err);
+        }
+    };
+
     // AUTO OPEN SUBMENU SESUAI URL
     useEffect(() => {
         const activeMenus = {};
@@ -142,7 +178,12 @@ const AdminLayout = () => {
                                             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`
                                     }
                                 >
-                                    {item.icon}
+                                    <div className="relative">
+                                        {item.icon}
+                                        {item.label === 'Manajemen Anggota' && pendingCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                                        )}
+                                    </div>
                                     {isSidebarOpen && <span>{item.label}</span>}
                                 </NavLink>
                             ) : (
@@ -151,7 +192,12 @@ const AdminLayout = () => {
                                     className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition"
                                 >
                                     <div className="flex items-center gap-3">
-                                        {item.icon}
+                                        <div className="relative">
+                                            {item.icon}
+                                            {item.label === 'Manajemen Anggota' && pendingCount > 0 && (
+                                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                                            )}
+                                        </div>
                                         {isSidebarOpen && <span className="font-medium">{item.label}</span>}
                                     </div>
                                     {isSidebarOpen && (
@@ -186,7 +232,12 @@ const AdminLayout = () => {
                                                         : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`
                                                 }
                                             >
-                                                {sub.icon}
+                                                <div className="relative">
+                                                    {sub.icon}
+                                                    {sub.label === 'Pengajuan Anggota' && pendingCount > 0 && (
+                                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                                                    )}
+                                                </div>
                                                 <span>{sub.label}</span>
                                             </NavLink>
                                         ))}
