@@ -144,12 +144,17 @@ export const exportMonitoringAngsuran = (data, range) => {
 };
 
 export const exportDisbursementDelivery = (data) => {
-    const headers = [[
-        'No', 'No Pinjaman', 'Nama', 'NPP', 'No Anggota', 'Lokasi', 'Tgl Pinjaman', 'Tgl Setuju',
-        'Tenor', 'Jml Pengajuan', 'Jml Disetujui', 'Bunga', 'Outs. Pokok', 'Outs. Bunga',
-        'Biaya Admin', 'Terima Bersih', 'No Rek', 'No HP', 'Keperluan', 'Bank', 'Tgl Realisasi'
-    ]];
+    // 1. DATE HEADER ROW
+    const dateHeader = ['', '', new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-')];
 
+    // 2. COLUMN HEADERS
+    const headers = [
+        'No', 'No Pinjaman', 'Nama', 'NPP', 'No Anggota', 'Lokasi', 'Tgl Pinjam', 'Tgl Setuju',
+        'Tenor', 'Jml. Pengajuan', 'Jumlah Pinjam', 'Bunga', 'Outs. Pokok', 'Outs. Bunga',
+        'Biaya', 'Diterima', 'NoRek', 'NoHP', 'Keperluan', 'Bank', 'Tgl Realisasi'
+    ];
+
+    // 3. DATA ROWS
     const rows = data.map((loan, index) => {
         const principal = parseFloat(loan.jumlah_pinjaman || 0);
         const tenor = loan.tenor_bulan || 1;
@@ -161,7 +166,10 @@ export const exportDisbursementDelivery = (data) => {
             totalBunga = parseFloat(loan.nilai_bunga || 0);
         }
 
-        const netDisbursement = principal - (parseFloat(loan.outstanding) || 0) - 5000;
+        const outsPokok = parseFloat(loan.calculated_outs_pokok || 0);
+        const outsBunga = parseFloat(loan.calculated_outs_bunga || 0);
+        const adminFee = 5000;
+        const netDisbursement = principal - outsPokok - outsBunga - adminFee;
 
         return [
             index + 1,
@@ -170,25 +178,55 @@ export const exportDisbursementDelivery = (data) => {
             loan.personal_data?.no_npp || '-',
             loan.personal_data?.no_anggota || '-',
             loan.personal_data?.lokasi || '-',
-            loan.created_at ? new Date(loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-',
-            (loan.approved_at || loan.created_at) ? new Date(loan.approved_at || loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-',
+            loan.created_at ? new Date(loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'numeric', year: 'numeric' }) : '-',
+            (loan.approved_at || loan.created_at) ? new Date(loan.approved_at || loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'numeric', year: 'numeric' }) : '-',
             tenor,
-            formatNum(loan.jumlah_pengajuan || loan.jumlah_pinjaman),
-            formatNum(principal),
-            formatNum(Math.round(totalBunga)),
-            formatNum(loan.calculated_outs_pokok || 0),
-            formatNum(loan.calculated_outs_bunga || 0),
-            formatNum(5000), // Biaya Admin
-            formatNum(netDisbursement),
+            parseFloat(loan.jumlah_pengajuan || loan.jumlah_pinjaman || 0),
+            principal,
+            Math.round(totalBunga),
+            outsPokok,
+            outsBunga,
+            adminFee,
+            netDisbursement,
             loan.personal_data?.rek_gaji || '-',
             loan.personal_data?.phone || '-',
             loan.keperluan || '-',
             loan.personal_data?.bank_gaji || '-',
-            loan.delivery_date ? new Date(loan.delivery_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'
+            loan.delivery_date ? new Date(loan.delivery_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'numeric', year: 'numeric' }) : '-'
         ];
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
+    // 4. TOTALS ROW
+    const totals = {
+        jmlPengajuan: rows.reduce((acc, curr) => acc + curr[9], 0),
+        jmlPinjam: rows.reduce((acc, curr) => acc + curr[10], 0),
+        bunga: rows.reduce((acc, curr) => acc + curr[11], 0),
+        outsPokok: rows.reduce((acc, curr) => acc + curr[12], 0),
+        outsBunga: rows.reduce((acc, curr) => acc + curr[13], 0),
+        biaya: rows.reduce((acc, curr) => acc + curr[14], 0),
+        diterima: rows.reduce((acc, curr) => acc + curr[15], 0)
+    };
+
+    const totalRow = [
+        '', '', '', '', '', '', '', '', '',
+        totals.jmlPengajuan,
+        totals.jmlPinjam,
+        totals.bunga,
+        totals.outsPokok,
+        totals.outsBunga,
+        totals.biaya,
+        totals.diterima,
+        '', '', '', '', ''
+    ];
+
+    const finalData = [
+        dateHeader,
+        headers,
+        ...rows,
+        totalRow
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Realisasi Pinjaman');
 

@@ -308,13 +308,38 @@ const MemberList = () => {
                                                 }`}>
                                                 {member.status?.toLowerCase() === 'pending' || !member.status
                                                     ? 'BELUM TERVERIFIKASI'
-                                                    : member.status.toUpperCase()}
+                                                    : member.status?.toLowerCase() === 'non_active'
+                                                        ? 'PASIF'
+                                                        : member.status.toUpperCase()}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <button className="p-2 text-gray-400 group-hover:text-blue-600 transition-colors rounded-full hover:bg-white border border-transparent group-hover:border-blue-100">
-                                                <MoreHorizontal size={18} />
-                                            </button>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRowClick(member);
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-full hover:bg-white border border-transparent hover:border-blue-100"
+                                                    title="Detail Anggota"
+                                                >
+                                                    <MoreHorizontal size={18} />
+                                                </button>
+                                                {(member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified' || !member.status) && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?`)) {
+                                                                handleDeactivateMember(member.id);
+                                                            }
+                                                        }}
+                                                        className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-white border border-transparent hover:border-red-100"
+                                                        title="Non-Aktifkan Anggota"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
