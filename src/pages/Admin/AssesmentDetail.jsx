@@ -119,6 +119,30 @@ const AssesmentDetail = () => {
         }
     };
 
+    const handleReject = async () => {
+        if (!loan) return;
+
+        const confirmReject = window.confirm(`Tolak pengajuan pinjaman dari ${loan.personal_data?.full_name}?`);
+        if (!confirmReject) return;
+
+        try {
+            const { error: updateError } = await supabase
+                .from('pinjaman')
+                .update({
+                    status: 'DITOLAK'
+                })
+                .eq('id', loan.id);
+
+            if (updateError) throw updateError;
+
+            alert('Pengajuan pinjaman telah DITOLAK!');
+            navigate('/admin/assesment-pinjaman');
+        } catch (error) {
+            console.error('Error rejecting loan:', error);
+            alert('Gagal menolak pinjaman: ' + error.message);
+        }
+    };
+
     const handleApprove = async () => {
         if (!loan) return;
 
@@ -473,6 +497,14 @@ const AssesmentDetail = () => {
                             >
                                 <Check size={18} />
                                 Setujui Sekarang
+                            </button>
+
+                            <button
+                                onClick={handleReject}
+                                className="w-full py-4 bg-red-50 text-red-600 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-100 transition-all border border-red-200"
+                            >
+                                <X size={18} />
+                                Tolak Pinjaman
                             </button>
 
                             <button

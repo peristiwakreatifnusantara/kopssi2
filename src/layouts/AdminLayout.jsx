@@ -57,7 +57,7 @@ const AdminLayout = () => {
                 { path: '/admin/assesment-pinjaman', label: 'Pengajuan Pinjaman', icon: <ClipboardCheck size={18} /> },
                 { path: '/admin/pencairan-pinjaman', label: 'Pencairan Pinjaman', icon: <BanknoteArrowUp size={18} /> },
                 { path: '/admin/monitor-pinjaman', label: 'Monitoring Pinjaman', icon: <BadgeCent size={18} /> },
-                { path: '/admin/disbursement-delivery', label: 'Realisasi', icon: <Send size={18} /> },
+
             ]
         },
         {
@@ -67,6 +67,8 @@ const AdminLayout = () => {
                 { path: '/admin/monitor-simpanan', label: 'Monitoring Simpanan', icon: <Banknote size={18} /> },
                 { path: '/admin/monitor-angsuran', label: 'Monitoring Angsuran', icon: <ClipboardCheck size={18} /> },
                 { path: '/admin/transaksi', label: 'Transaksi', icon: <ArrowLeftRight size={18} /> },
+                { path: '/admin/disbursement-delivery', label: 'Realisasi Pinjaman', icon: <Send size={18} /> },
+                { path: '/admin/realisasi-karyawan', label: 'Realisasi Karyawan', icon: <Users size={18} /> },
             ]
         },
         {

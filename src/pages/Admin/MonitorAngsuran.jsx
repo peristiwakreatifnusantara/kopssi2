@@ -261,7 +261,7 @@ const MonitorAngsuran = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center text-[10px] font-bold text-gray-500 italic">
-                                            {inst.tanggal_bayar ? new Date(inst.tanggal_bayar).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                                            {inst.tanggal_bayar ? new Date(inst.tanggal_bayar).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             {inst.status !== 'PAID' ? (

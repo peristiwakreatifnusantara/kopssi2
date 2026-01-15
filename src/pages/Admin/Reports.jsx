@@ -390,7 +390,7 @@ const AdminReports = () => {
                                                 <p className="text-xs font-bold text-gray-700 uppercase">{member.work_unit || '-'}</p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-xs font-bold text-gray-500">{new Date(member.created_at).toLocaleDateString('id-ID')}</p>
+                                                <p className="text-xs font-bold text-gray-500">{new Date(member.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                                             </td>
                                         </tr>
                                     ))}

@@ -254,7 +254,7 @@ const MonitorSimpanan = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-gray-600 text-xs font-bold">
-                                                {new Date(bill.jatuh_tempo).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                {new Date(bill.jatuh_tempo).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                                             </td>
                                             <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
                                                 {formatCurrency(bill.amount_pokok)}

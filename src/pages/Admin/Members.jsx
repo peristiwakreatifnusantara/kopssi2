@@ -4,7 +4,7 @@ import { Search, Filter, MoreHorizontal, X, User, Phone, Briefcase, MapPin, Cred
 import { supabase } from '../../lib/supabaseClient';
 
 
-const MemberDetailModal = ({ member, onClose }) => {
+const MemberDetailModal = ({ member, onClose, onDeactivate }) => {
     if (!member) return null;
 
     const sections = [
@@ -41,7 +41,7 @@ const MemberDetailModal = ({ member, onClose }) => {
             icon: <CreditCard size={18} />,
             items: [
                 { label: 'Status Keanggotaan', value: member.status?.toUpperCase() || 'PENDING' },
-                { label: 'Tanggal Daftar', value: new Date(member.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) },
+                { label: 'Tanggal Daftar', value: new Date(member.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) },
             ]
         }
     ];
@@ -105,6 +105,18 @@ const MemberDetailModal = ({ member, onClose }) => {
                 </div>
 
                 <div className="p-4 border-t border-gray-100 bg-white flex justify-end gap-3">
+                    {(member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified' || !member.status) && (
+                        <button
+                            onClick={() => {
+                                if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?\n\nSeluruh simpanan akan dikembalikan dan pinjaman berjalan akan diperhitungkan.`)) {
+                                    onDeactivate(member.id);
+                                }
+                            }}
+                            className="px-6 py-2 rounded-lg bg-red-50 text-red-600 border border-red-100 text-sm font-bold hover:bg-red-100 transition-colors uppercase tracking-tight"
+                        >
+                            Non-Aktifkan Anggota
+                        </button>
+                    )}
                     <button
                         onClick={onClose}
                         className="px-6 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
@@ -126,6 +138,34 @@ const MemberList = () => {
     const [companies, setCompanies] = useState([]);
     const [selectedMember, setSelectedMember] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [isDeactivating, setIsDeactivating] = useState(false);
+
+    const handleDeactivateMember = async (memberId) => {
+        try {
+            setIsDeactivating(true);
+            const { error } = await supabase
+                .from('personal_data')
+                .update({
+                    status: 'NON_ACTIVE',
+                    keluar_anggota: 'Y',
+                    tanggal_keluar: new Date().toISOString(),
+                    sebab_keluar: 'NONAKTIFKAN OLEH ADMIN',
+                    exit_realisasi_status: 'PENDING'
+                })
+                .eq('id', memberId);
+
+            if (error) throw error;
+
+            alert('Anggota berhasil dinonaktifkan! Silakan proses pengembalian dana di halaman Realisasi.');
+            setIsDetailModalOpen(false);
+            fetchMembers();
+        } catch (err) {
+            console.error("Error deactivating member:", err);
+            alert("Gagal menonaktifkan anggota: " + err.message);
+        } finally {
+            setIsDeactivating(false);
+        }
+    };
 
     const fetchCompanies = async () => {
         try {
@@ -258,11 +298,13 @@ const MemberList = () => {
                                         <td className="px-6 py-4">
                                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic transition-all ${member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified'
                                                 ? 'bg-emerald-50 text-emerald-600'
-                                                : member.status?.toLowerCase() === 'rejected'
-                                                    ? 'bg-red-50 text-red-600'
-                                                    : member.status?.toLowerCase() === 'done verifikasi'
-                                                        ? 'bg-blue-50 text-blue-600'
-                                                        : 'bg-amber-50 text-amber-600'
+                                                : member.status?.toLowerCase() === 'nonaktif' || member.status?.toLowerCase() === 'non_active'
+                                                    ? 'bg-red-100 text-red-700 border border-red-200'
+                                                    : member.status?.toLowerCase() === 'rejected'
+                                                        ? 'bg-red-50 text-red-600'
+                                                        : member.status?.toLowerCase() === 'done verifikasi'
+                                                            ? 'bg-blue-50 text-blue-600'
+                                                            : 'bg-amber-50 text-amber-600'
                                                 }`}>
                                                 {member.status?.toLowerCase() === 'pending' || !member.status
                                                     ? 'BELUM TERVERIFIKASI'
@@ -300,7 +342,13 @@ const MemberList = () => {
                 <MemberDetailModal
                     member={selectedMember}
                     onClose={() => setIsDetailModalOpen(false)}
+                    onDeactivate={handleDeactivateMember}
                 />
+            )}
+            {isDeactivating && (
+                <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px] flex items-center justify-center">
+                    <Loader2 className="animate-spin text-blue-600" size={48} />
+                </div>
             )}
         </div>
     );

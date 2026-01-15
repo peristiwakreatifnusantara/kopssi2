@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { Search, Filter, CheckCircle, Clock, Banknote, User, BadgeCent, Download, Loader2, Send } from 'lucide-react';
+import { Search, Filter, CheckCircle, Banknote, Download, Loader2 } from 'lucide-react';
 
 const DisbursementDelivery = () => {
     const navigate = useNavigate();
@@ -15,7 +15,7 @@ const DisbursementDelivery = () => {
     const handleExportExcel = async () => {
         try {
             const { exportDisbursementDelivery } = await import('../../utils/reportExcel');
-            exportDisbursementDelivery(filteredLoans);
+            exportDisbursementDelivery(loans);
         } catch (err) {
             console.error('Excel export error:', err);
         }
@@ -48,16 +48,7 @@ const DisbursementDelivery = () => {
                 .select(`
                     *,
                     personal_data:personal_data_id (
-                        full_name,
-                        nik,
-                        work_unit,
-                        company,
-                        no_npp,
-                        no_anggota,
-                        lokasi,
-                        rek_gaji,
-                        bank_gaji,
-                        phone
+                        full_name, nik, work_unit, company, no_npp, no_anggota, lokasi, rek_gaji, bank_gaji, phone
                     )
                 `)
                 .eq('status', 'DICAIRKAN')
@@ -65,21 +56,16 @@ const DisbursementDelivery = () => {
 
             if (error) throw error;
 
-            // NEW: Fetch all installments that were settled via deduction
-            // We'll match them to the new loans using the 'keterangan' field
+            // Fetch installments for outstanding breakdown
             const { data: settledInsts } = await supabase
                 .from('angsuran')
                 .select('*, pinjaman(*)')
                 .eq('metode_bayar', 'POTONG_PENCAIRAN');
 
             const loansWithBreakdown = (data || []).map(loan => {
-                const matches = (settledInsts || []).filter(inst =>
-                    inst.keterangan?.includes(loan.no_pinjaman)
-                );
-
+                const matches = (settledInsts || []).filter(inst => inst.keterangan?.includes(loan.no_pinjaman));
                 let outsPokok = 0;
                 let outsBunga = 0;
-
                 matches.forEach(inst => {
                     const oldLoan = inst.pinjaman;
                     if (oldLoan) {
@@ -91,14 +77,11 @@ const DisbursementDelivery = () => {
                         } else if (oldLoan.tipe_bunga === 'NOMINAL') {
                             totalBunga = parseFloat(oldLoan.nilai_bunga || 0);
                         }
-
                         outsBunga += (totalBunga / tenor);
                         outsPokok += (principal / tenor);
                     }
                 });
 
-                // Reconciliation: Ensure Pokok + Bunga matches the saved 'outstanding' total
-                // If there's a small rounding difference, adjust the Pokok
                 const totalCalculated = outsPokok + outsBunga;
                 const savedTotal = parseFloat(loan.outstanding || 0);
                 if (savedTotal > 0 && totalCalculated > 0) {
@@ -124,7 +107,7 @@ const DisbursementDelivery = () => {
     };
 
     const handleConfirmDelivery = async (loan) => {
-        if (!window.confirm(`Konfirmasi bahwa dana pinjaman untuk ${loan.personal_data?.full_name} telah dikirimkan ke anggota?`)) return;
+        if (!window.confirm(`Konfirmasi bahwa dana pinjaman untuk ${loan.personal_data?.full_name} telah dikirimkan?`)) return;
 
         try {
             setUpdatingId(loan.id);
@@ -167,8 +150,8 @@ const DisbursementDelivery = () => {
         <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
                 <div className="text-left">
-                    <h2 className="text-3xl font-black text-gray-900 italic uppercase tracking-tight">Realisasi</h2>
-                    <p className="text-sm text-gray-500 mt-1 font-medium italic uppercase tracking-wider">Lacak pengiriman dana ke anggota setelah status DICAIRKAN</p>
+                    <h2 className="text-3xl font-black text-gray-900 italic uppercase tracking-tight">Realisasi Pinjaman</h2>
+                    <p className="text-sm text-gray-500 mt-1 font-medium italic uppercase tracking-wider"></p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -204,128 +187,104 @@ const DisbursementDelivery = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-gray-100 overflow-hidden">
-                <div className="overflow-x-auto text-left">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-gray-50/50 border-b border-gray-100 italic font-black text-[8px] uppercase tracking-tighter text-gray-400">
-                                <th className="px-2 py-3 text-center">No</th>
-                                <th className="px-2 py-3">No Pinjaman</th>
-                                <th className="px-2 py-3">Nama</th>
-                                <th className="px-2 py-3">NPP</th>
-                                <th className="px-2 py-3">No Anggota</th>
-                                <th className="px-2 py-3">Lokasi</th>
-                                <th className="px-2 py-3 text-center">Tgl Pin</th>
-                                <th className="px-2 py-3 text-center">Tgl Setuju</th>
-                                <th className="px-2 py-3 text-center">Tenor</th>
-                                <th className="px-2 py-3 text-right">Pengajuan</th>
-                                <th className="px-2 py-3 text-right">Disetujui</th>
-                                <th className="px-2 py-3 text-right">Bunga</th>
-                                <th className="px-2 py-3 text-right">Outs P</th>
-                                <th className="px-2 py-3 text-right">Outs B</th>
-                                <th className="px-2 py-3 text-right">Admin</th>
-                                <th className="px-2 py-3 text-right">Cair</th>
-                                <th className="px-2 py-3">No Rek</th>
-                                <th className="px-2 py-3">No HP</th>
-                                <th className="px-2 py-3">Keperluan</th>
-                                <th className="px-2 py-3">Bank</th>
-                                <th className="px-2 py-3 text-center">Tgl Real</th>
-                                <th className="px-2 py-3 text-center">Aksi</th>
+            <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-gray-100 overflow-auto">
+                <table className="w-full text-left border-collapse min-w-[1200px]">
+                    <thead>
+                        <tr className="bg-gray-50/50 border-b border-gray-100 italic font-black text-[10px] uppercase tracking-tighter text-gray-400">
+                            <th className="px-2 py-3 text-center">No</th>
+                            <th className="px-2 py-3">No Pinjaman</th>
+                            <th className="px-2 py-3">Nama</th>
+                            <th className="px-2 py-3">NPP</th>
+                            <th className="px-2 py-3">No Anggota</th>
+                            <th className="px-2 py-3">Lokasi</th>
+                            <th className="px-2 py-3 text-center">Tgl Pin</th>
+                            <th className="px-2 py-3 text-center">Tgl Setuju</th>
+                            <th className="px-2 py-3 text-center">Tenor</th>
+                            <th className="px-2 py-3 text-right">Pengajuan</th>
+                            <th className="px-2 py-3 text-right">Disetujui</th>
+                            <th className="px-2 py-3 text-right">Bunga</th>
+                            <th className="px-2 py-3 text-right">Outs P</th>
+                            <th className="px-2 py-3 text-right">Outs B</th>
+                            <th className="px-2 py-3 text-right">Admin</th>
+                            <th className="px-2 py-3 text-right text-emerald-700">Terima Bersih</th>
+                            <th className="px-2 py-3">No Rek</th>
+                            <th className="px-2 py-3 text-center">Tgl Real</th>
+                            <th className="px-2 py-3 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {loading ? (
+                            <tr>
+                                <td colSpan="20" className="px-6 py-12 text-center text-gray-500 text-[10px]">
+                                    <Loader2 className="animate-spin h-8 w-8 text-emerald-600 mx-auto mb-4" />
+                                    Memuat data pencairan...
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
-                                        <Loader2 className="animate-spin h-8 w-8 text-emerald-600 mx-auto mb-4" />
-                                        Memuat data pencairan...
-                                    </td>
-                                </tr>
-                            ) : filteredLoans.length === 0 ? (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-20 text-center text-gray-400 italic">
-                                        <Banknote size={48} className="mx-auto mb-4 opacity-20" />
-                                        <p className="font-bold">Tidak ada data pencairan untuk ditampilkan</p>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredLoans.map((loan, idx) => {
-                                    const principal = parseFloat(loan.jumlah_pinjaman || 0);
-                                    const tenor = loan.tenor_bulan || 1;
-                                    let totalBunga = 0;
+                        ) : filteredLoans.length === 0 ? (
+                            <tr>
+                                <td colSpan="20" className="px-6 py-20 text-center text-gray-400 italic text-[10px]">
+                                    <Banknote size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p className="font-bold">Tidak ada data pencairan untuk ditampilkan</p>
+                                </td>
+                            </tr>
+                        ) : (
+                            filteredLoans.map((loan, idx) => {
+                                const principal = parseFloat(loan.jumlah_pinjaman || 0);
+                                const tenor = loan.tenor_bulan || 1;
+                                let totalBunga = 0;
+                                if (loan.tipe_bunga === 'PERSENAN') {
+                                    totalBunga = principal * (parseFloat(loan.nilai_bunga || 0) / 100) * (tenor / 12);
+                                } else if (loan.tipe_bunga === 'NOMINAL') {
+                                    totalBunga = parseFloat(loan.nilai_bunga || 0);
+                                }
+                                const netDisbursement = principal - (parseFloat(loan.outstanding) || 0) - 5000;
 
-                                    if (loan.tipe_bunga === 'PERSENAN') {
-                                        totalBunga = principal * (parseFloat(loan.nilai_bunga || 0) / 100) * (tenor / 12);
-                                    } else if (loan.tipe_bunga === 'NOMINAL') {
-                                        totalBunga = parseFloat(loan.nilai_bunga || 0);
-                                    }
-
-                                    const netDisbursement = principal - (parseFloat(loan.outstanding) || 0) - 5000;
-
-                                    return (
-                                        <tr key={loan.id} className="hover:bg-emerald-50 transition-colors group border-b border-gray-50">
-                                            <td className="px-2 py-2 text-center text-[9px] font-bold text-gray-400">{idx + 1}</td>
-                                            <td className="px-2 py-2 text-[9px] font-black font-mono text-gray-600 uppercase italic whitespace-nowrap">{loan.no_pinjaman}</td>
-                                            <td className="px-2 py-2 text-[9px] font-black text-gray-900 uppercase italic whitespace-nowrap">{loan.personal_data?.full_name || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-bold text-gray-500 font-mono italic">{loan.personal_data?.no_npp || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-bold text-gray-500 font-mono italic">{loan.personal_data?.no_anggota || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-bold text-gray-400 uppercase italic truncate max-w-[80px]">{loan.personal_data?.lokasi || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] text-center font-bold text-gray-500 italic">
-                                                {loan.created_at ? new Date(loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-[9px] text-center font-bold text-gray-500 italic">
-                                                {(loan.approved_at || loan.created_at) ? new Date(loan.approved_at || loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-[9px] text-center font-black text-emerald-600 italic">{tenor}M</td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-bold text-gray-400 font-mono">
-                                                {formatCurrency(loan.jumlah_pengajuan || loan.jumlah_pinjaman)}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-black text-gray-700 font-mono">
-                                                {formatCurrency(principal)}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-bold text-amber-600 font-mono italic">
-                                                {formatCurrency(totalBunga)}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-black text-red-500 font-mono italic">
-                                                {loan.calculated_outs_pokok > 0 ? formatCurrency(loan.calculated_outs_pokok) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-bold text-red-400 font-mono italic">
-                                                {loan.calculated_outs_bunga > 0 ? formatCurrency(loan.calculated_outs_bunga) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-bold text-gray-500 font-mono italic">
-                                                {formatCurrency(5000)}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[9px] font-black text-emerald-700 font-mono bg-emerald-50/50">
-                                                {formatCurrency(netDisbursement)}
-                                            </td>
-                                            <td className="px-2 py-2 text-[9px] font-mono font-bold text-gray-500 italic">{loan.personal_data?.rek_gaji || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-mono font-bold text-gray-500 italic">{loan.personal_data?.phone || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-bold text-gray-400 uppercase italic truncate max-w-[100px]">{loan.keperluan || '-'}</td>
-                                            <td className="px-2 py-2 text-[9px] font-black text-blue-600 italic uppercase">{loan.personal_data?.bank_gaji || '-'}</td>
-                                            <td className="px-2 py-2 text-center text-[9px] font-black text-emerald-600 italic">
-                                                {loan.delivery_date ? new Date(loan.delivery_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-center">
-                                                {loan.delivery_status !== 'SENT' ? (
-                                                    <button
-                                                        onClick={() => handleConfirmDelivery(loan)}
-                                                        disabled={updatingId === loan.id}
-                                                        className="flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded text-[8px] font-black uppercase tracking-tight hover:bg-emerald-700 transition-all disabled:opacity-50 mx-auto"
-                                                    >
-                                                        {updatingId === loan.id ? <Loader2 className="animate-spin" size={10} /> : <CheckCircle size={10} />}
-                                                        OK
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-[8px] font-black text-gray-300 uppercase italic">SENT</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                return (
+                                    <tr key={loan.id} className="hover:bg-emerald-50 transition-colors group border-b border-gray-50">
+                                        <td className="px-2 py-2 text-center text-[10px] font-bold text-gray-400">{idx + 1}</td>
+                                        <td className="px-2 py-2 text-[10px] font-black font-mono text-gray-600 uppercase italic whitespace-nowrap">{loan.no_pinjaman}</td>
+                                        <td className="px-2 py-2 text-[10px] font-black text-gray-900 uppercase italic whitespace-nowrap">{loan.personal_data?.full_name || '-'}</td>
+                                        <td className="px-2 py-2 text-[10px] font-bold text-gray-500 font-mono italic">{loan.personal_data?.no_npp || '-'}</td>
+                                        <td className="px-2 py-2 text-[10px] font-bold text-gray-500 font-mono italic">{loan.personal_data?.no_anggota || '-'}</td>
+                                        <td className="px-2 py-2 text-[10px] font-bold text-gray-400 uppercase italic truncate max-w-[80px]">{loan.personal_data?.lokasi || '-'}</td>
+                                        <td className="px-2 py-2 text-[10px] text-center font-bold text-gray-500 italic">
+                                            {loan.created_at ? new Date(loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                        </td>
+                                        <td className="px-2 py-2 text-center text-[10px] font-bold text-gray-500 italic">
+                                            {(loan.approved_at || loan.created_at) ? new Date(loan.approved_at || loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                        </td>
+                                        <td className="px-2 py-2 text-center text-[10px] font-black text-emerald-600 italic">{tenor}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-bold text-gray-400 font-mono">{formatCurrency(loan.jumlah_pengajuan || loan.jumlah_pinjaman)}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-black text-gray-700 font-mono">{formatCurrency(principal)}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-bold text-amber-600 font-mono italic">{formatCurrency(totalBunga)}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-black text-red-500 font-mono italic">{loan.calculated_outs_pokok > 0 ? formatCurrency(loan.calculated_outs_pokok) : '-'}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-bold text-red-400 font-mono italic">{loan.calculated_outs_bunga > 0 ? formatCurrency(loan.calculated_outs_bunga) : '-'}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-bold text-gray-500 font-mono italic">{formatCurrency(5000)}</td>
+                                        <td className="px-2 py-2 text-right text-[10px] font-black text-emerald-700 font-mono bg-emerald-50/50">{formatCurrency(netDisbursement)}</td>
+                                        <td className="px-2 py-2 text-[10px] font-mono font-bold text-gray-500 italic whitespace-nowrap">{loan.personal_data?.rek_gaji || '-'}</td>
+                                        <td className="px-2 py-2 text-center text-[10px] font-black text-emerald-600 italic">
+                                            {loan.delivery_date ? new Date(loan.delivery_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                        </td>
+                                        <td className="px-2 py-2 text-center text-[10px]">
+                                            {loan.delivery_status !== 'SENT' ? (
+                                                <button
+                                                    onClick={() => handleConfirmDelivery(loan)}
+                                                    disabled={updatingId === loan.id}
+                                                    className="flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-black uppercase tracking-tight hover:bg-emerald-700 transition-all disabled:opacity-50 mx-auto"
+                                                >
+                                                    {updatingId === loan.id ? <Loader2 className="animate-spin" size={12} /> : <CheckCircle size={12} />}
+                                                    OK
+                                                </button>
+                                            ) : (
+                                                <span className="text-[10px] font-black text-gray-300 uppercase italic">SENT</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
             </div>
         </div>
     );

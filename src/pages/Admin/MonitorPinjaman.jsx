@@ -311,12 +311,14 @@ const MonitorPinjaman = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-gray-500 text-xs font-bold italic">
-                                                {new Date(loan.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                {new Date(loan.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border ${loan.status === 'DICAIRKAN'
                                                     ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                                    : 'bg-amber-100 text-amber-700 border-amber-200'
+                                                    : loan.status === 'DITOLAK'
+                                                        ? 'bg-red-100 text-red-700 border-red-200'
+                                                        : 'bg-amber-100 text-amber-700 border-amber-200'
                                                     }`}>
                                                     {loan.status}
                                                 </span>

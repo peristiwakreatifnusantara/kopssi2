@@ -29,6 +29,7 @@ import AddMember from './pages/Admin/AddMember';
 import MasterData from './pages/Admin/MasterData';
 import LoanDetail from './pages/Admin/LoanDetail';
 import DisbursementDelivery from './pages/Admin/DisbursementDelivery';
+import RealisasiKaryawan from './pages/Admin/RealisasiKaryawan';
 
 function App() {
   return (
@@ -58,6 +59,7 @@ function App() {
           <Route path="pencairan-pinjaman" element={<PencairanPinjaman />} />
           <Route path="pencairan-pinjaman/:id" element={<PencairanDetail />} />
           <Route path="disbursement-delivery" element={<DisbursementDelivery />} />
+          <Route path="realisasi-karyawan" element={<RealisasiKaryawan />} />
           <Route path="members" element={<MemberList />} />
           <Route path="add-member" element={<AddMember />} />
           <Route path="monitor-simpanan" element={<MonitorSimpanan />} />

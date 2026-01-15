@@ -123,7 +123,7 @@ const AssesmentPinjaman = () => {
         return date.toLocaleDateString('id-ID', {
             year: 'numeric',
             month: 'long',
-            day: 'numeric'
+            day: '2-digit'
         });
     };
 

@@ -251,7 +251,7 @@ const LoanDetail = () => {
     const formatDate = (dateString, withTime = false) => {
         if (!dateString) return '-';
         const date = new Date(dateString);
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        const options = { year: 'numeric', month: 'long', day: '2-digit' };
         if (withTime) {
             options.hour = '2-digit';
             options.minute = '2-digit';
@@ -315,7 +315,8 @@ const LoanDetail = () => {
                 </div>
                 <div className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest italic border ${loan.status === 'DICAIRKAN' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm shadow-emerald-50' :
                     loan.status === 'DISETUJUI' ? 'bg-blue-50 text-blue-700 border-blue-100 shadow-sm shadow-blue-50' :
-                        'bg-amber-50 text-amber-700 border-amber-100 shadow-sm shadow-amber-50'
+                        loan.status === 'DITOLAK' ? 'bg-red-50 text-red-700 border-red-100 shadow-sm shadow-red-50' :
+                            'bg-amber-50 text-amber-700 border-amber-100 shadow-sm shadow-amber-50'
                     }`}>
                     Status: {loan.status}
                 </div>
