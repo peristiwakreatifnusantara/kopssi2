@@ -9,6 +9,14 @@ const RealisasiKaryawan = () => {
     const [filterCompany, setFilterCompany] = useState('ALL');
     const [companies, setCompanies] = useState([]);
     const [updatingId, setUpdatingId] = useState(null);
+    const [activeTab, setActiveTab] = useState('BELUM');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
     const handleExportExcel = async () => {
         try {
@@ -36,18 +44,33 @@ const RealisasiKaryawan = () => {
     useEffect(() => {
         fetchRealisasiData();
         fetchCompanies();
-    }, []);
+    }, [startDate, endDate]);
+
+    useEffect(() => {
+        setSelectedIds([]);
+        setIsSelectionMode(false);
+    }, [activeTab]);
 
     const fetchRealisasiData = async () => {
         try {
             setLoading(true);
 
-            // Fetch Deactivated Members (Pending Realisasi)
-            const { data: exitsData, error: exitsError } = await supabase
+            let query = supabase
                 .from('personal_data')
                 .select('*')
-                .eq('status', 'NON_ACTIVE')
-                .eq('exit_realisasi_status', 'PENDING');
+                .eq('status', 'NON_ACTIVE');
+
+            if (activeTab === 'BELUM') {
+                query = query.eq('exit_realisasi_status', 'PENDING')
+                    .gte('tanggal_keluar', `${startDate}T00:00:00`)
+                    .lte('tanggal_keluar', `${endDate}T23:59:59`);
+            } else {
+                query = query.eq('exit_realisasi_status', 'SENT')
+                    .gte('exit_realisasi_date', `${startDate}T00:00:00`)
+                    .lte('exit_realisasi_date', `${endDate}T23:59:59`);
+            }
+
+            const { data: exitsData, error: exitsError } = await query;
 
             if (exitsError) throw exitsError;
 
@@ -159,6 +182,57 @@ const RealisasiKaryawan = () => {
         }
     };
 
+    const handleBulkConfirm = async () => {
+        const items = filteredData.filter(i => selectedIds.includes(i.id));
+        if (items.length === 0) return;
+
+        if (!window.confirm(`Konfirmasi realisasi untuk ${items.length} anggota terpilih?`)) return;
+
+        try {
+            setLoading(true);
+            const { error } = await supabase
+                .from('personal_data')
+                .update({
+                    exit_realisasi_status: 'SENT',
+                    exit_realisasi_date: new Date().toISOString()
+                })
+                .in('id', selectedIds);
+
+            if (error) throw error;
+
+            alert(`Berhasil merealisasikan ${items.length} pengembalian!`);
+
+            const { exportExitRealisasi } = await import('../../utils/reportExcel');
+            exportExitRealisasi(items);
+
+            setSelectedIds([]);
+            fetchRealisasiData();
+        } catch (err) {
+            console.error('Bulk confirm error:', err);
+            alert('Gagal memproses realisasi massal');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === filteredData.length) {
+            setSelectedIds([]);
+        } else {
+            setSelectedIds(filteredData.map(i => i.id));
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const calculateSelectedTotal = () => {
+        return filteredData
+            .filter(i => selectedIds.includes(i.id))
+            .reduce((sum, i) => sum + (i.jumlah - i.outs_pokok - i.outs_bunga - i.admin), 0);
+    };
+
     const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
     const filteredData = loans.filter(item => {
@@ -174,7 +248,20 @@ const RealisasiKaryawan = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
                 <div className="text-left">
                     <h2 className="text-3xl font-black text-gray-900 italic uppercase tracking-tight">Realisasi Karyawan</h2>
-                    <p className="text-sm text-gray-500 mt-1 font-medium italic uppercase tracking-wider"></p>
+                    <div className="flex gap-4 mt-2">
+                        <button
+                            onClick={() => setActiveTab('BELUM')}
+                            className={`text-xs font-black uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === 'BELUM' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Belum Direalisasi
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('SUDAH')}
+                            className={`text-xs font-black uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === 'SUDAH' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Sudah Direalisasi
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -186,6 +273,33 @@ const RealisasiKaryawan = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full md:w-64 text-sm shadow-sm"
+                        />
+                    </div>
+                    {activeTab === 'BELUM' && (
+                        <button
+                            onClick={() => {
+                                setIsSelectionMode(!isSelectionMode);
+                                if (isSelectionMode) setSelectedIds([]);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm border-2 ${isSelectionMode ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-white text-blue-600 border-blue-50'}`}
+                        >
+                            <CheckCircle size={16} />
+                            {isSelectionMode ? 'Batal Pilih' : 'Pilih Masal'}
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white shadow-sm font-bold"
+                        />
+                        <span className="text-gray-400 font-bold">s/d</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white shadow-sm font-bold"
                         />
                     </div>
                     <div className="relative">
@@ -214,6 +328,16 @@ const RealisasiKaryawan = () => {
                 <table className="w-full text-left border-collapse min-w-[1200px]">
                     <thead>
                         <tr className="bg-gray-50/50 border-b border-gray-100 italic font-black text-[10px] uppercase tracking-tighter text-gray-400">
+                            <th className="px-2 py-3 text-center w-10">
+                                {isSelectionMode && (
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                                        onChange={toggleSelectAll}
+                                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                )}
+                            </th>
                             <th className="px-2 py-3 text-center">No</th>
                             <th className="px-2 py-3">Nama</th>
                             <th className="px-2 py-3">NPP</th>
@@ -254,7 +378,21 @@ const RealisasiKaryawan = () => {
                                 const netBack = item.jumlah - item.outs_pokok - item.outs_bunga - item.admin;
 
                                 return (
-                                    <tr key={item.id} className="hover:bg-emerald-50 transition-colors group border-b border-gray-50">
+                                    <tr
+                                        key={item.id}
+                                        className={`hover:bg-emerald-50 transition-colors group border-b border-gray-50 ${(isSelectionMode && selectedIds.includes(item.id)) ? 'bg-emerald-50/70' : ''}`}
+                                        onClick={() => isSelectionMode && toggleSelect(item.id)}
+                                    >
+                                        <td className="px-2 py-2 text-center" onClick={(e) => isSelectionMode && e.stopPropagation()}>
+                                            {isSelectionMode && (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.includes(item.id)}
+                                                    onChange={() => toggleSelect(item.id)}
+                                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                            )}
+                                        </td>
                                         <td className="px-2 py-2 text-center text-[10px] font-bold text-gray-400">{idx + 1}</td>
                                         <td className="px-2 py-2 text-[10px] font-black text-gray-900 uppercase italic whitespace-nowrap">{item.nama}</td>
                                         <td className="px-2 py-2 text-[10px] font-bold text-gray-500 font-mono italic">{item.npp}</td>
@@ -279,7 +417,7 @@ const RealisasiKaryawan = () => {
                                         <td className="px-2 py-2 text-center">
                                             {item.status !== 'SENT' ? (
                                                 <button
-                                                    onClick={() => handleConfirmDelivery(item)}
+                                                    onClick={(e) => { e.stopPropagation(); handleConfirmDelivery(item); }}
                                                     disabled={updatingId === item.id}
                                                     className="flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-black uppercase tracking-tight hover:bg-emerald-700 transition-all disabled:opacity-50 mx-auto"
                                                 >
@@ -297,6 +435,50 @@ const RealisasiKaryawan = () => {
                     </tbody>
                 </table>
             </div>
+
+            {/* DATA COUNT FOOTER */}
+            <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest italic">
+                    Menampilkan <span className="text-emerald-600">{filteredData.length}</span> Data Terpilih
+                </p>
+                <p className="text-[10px] font-bold text-gray-300 italic uppercase">
+                    Kopssi Management System • {new Date().getFullYear()}
+                </p>
+            </div>
+
+            {/* Selection Summary Popup/Bar */}
+            {selectedIds.length > 0 && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-500">
+                    <div className="bg-gray-900 border border-white/10 text-white rounded-2xl shadow-2xl shadow-black/40 px-8 py-5 flex items-center gap-10 backdrop-blur-md">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 italic">Terpilih</span>
+                            <span className="text-2xl font-black italic">{selectedIds.length} <span className="text-sm not-italic opacity-50 uppercase tracking-tighter">Record</span></span>
+                        </div>
+
+                        <div className="h-10 w-[1px] bg-white/10"></div>
+
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 italic">Total Pengembalian</span>
+                            <span className="text-2xl font-black italic font-mono text-emerald-400">{formatCurrency(calculateSelectedTotal())}</span>
+                        </div>
+
+                        <div className="flex gap-3 ml-4">
+                            <button
+                                onClick={() => setSelectedIds([])}
+                                className="px-6 py-3 border border-white/20 hover:bg-white/10 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                onClick={handleBulkConfirm}
+                                className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+                            >
+                                <CheckCircle size={14} /> Konfirmasi Terpilih
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

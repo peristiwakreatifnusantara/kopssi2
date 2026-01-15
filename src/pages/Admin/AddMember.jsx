@@ -37,7 +37,7 @@ const AddMember = () => {
             const { data: existingUser } = await supabase
                 .from('users')
                 .select('id')
-                .eq('phone', loginIdentifier)
+                .eq('no_npp', loginIdentifier)
                 .single();
 
             if (existingUser) {
@@ -46,7 +46,7 @@ const AddMember = () => {
                 const { data: newUser, error: userError } = await supabase
                     .from('users')
                     .insert({
-                        phone: loginIdentifier,
+                        no_npp: loginIdentifier,
                         email: data.email || null,
                         password: 'placeholder-password',
                         role: 'MEMBER'

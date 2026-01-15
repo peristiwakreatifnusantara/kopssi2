@@ -426,6 +426,16 @@ const DisbursementDelivery = () => {
                 </table>
             </div>
 
+            {/* DATA COUNT FOOTER */}
+            <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest italic">
+                    Menampilkan <span className="text-emerald-600">{filteredLoans.length}</span> Data Terpilih
+                </p>
+                <p className="text-[10px] font-bold text-gray-300 italic uppercase">
+                    Kopssi Management System • {new Date().getFullYear()}
+                </p>
+            </div>
+
             {/* Selection Summary Popup/Bar */}
             {selectedIds.length > 0 && (
                 <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-500">

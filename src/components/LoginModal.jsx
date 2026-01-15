@@ -50,8 +50,8 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
             // 🔍 CEK USER
             const { data: userData, error: userError } = await supabase
                 .from('users')
-                .select('id, phone, role')
-                .eq('phone', npp) // NPP stored in 'phone' column
+                .select('id, no_npp, role')
+                .eq('no_npp', npp)
                 .eq('password', password)
                 .single();
 
@@ -69,7 +69,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
 
                 const adminPayload = {
                     id: userData.id,
-                    phone: userData.phone,
+                    no_npp: userData.no_npp,
                     role: 'ADMIN',
                     name: personalData?.full_name || 'Administrator'
                 };
@@ -100,7 +100,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
 
                 const memberPayload = {
                     id: userData.id,
-                    phone: userData.phone,
+                    no_npp: userData.no_npp,
                     role: 'MEMBER',
                     name: personalData.full_name
                 };
@@ -161,7 +161,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, onRegisterClick }) => {
                                     value={npp}
                                     onChange={(e) => setNpp(e.target.value)}
                                     className="block w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
-                                    placeholder="Contoh: 12345678"
+                                    placeholder="Contoh: J"
                                     required
                                 />
                             </div>
