@@ -226,6 +226,18 @@ const PencairanPinjaman = () => {
                 </div>
             )}
 
+            {/* DATA COUNT FOOTER */}
+            {!loading && filteredLoans.length > 0 && (
+                <div className="bg-white px-6 py-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest italic text-left">
+                        Menampilkan <span className="text-emerald-600">{filteredLoans.length}</span> Pengajuan Menunggu Pencairan
+                    </p>
+                    <p className="text-[10px] font-bold text-gray-300 italic uppercase">
+                        Kopssi Management System • {new Date().getFullYear()}
+                    </p>
+                </div>
+            )}
+
         </div>
     );
 };
