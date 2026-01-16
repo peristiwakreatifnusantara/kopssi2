@@ -30,6 +30,7 @@ import MasterData from './pages/Admin/MasterData';
 import LoanDetail from './pages/Admin/LoanDetail';
 import DisbursementDelivery from './pages/Admin/DisbursementDelivery';
 import RealisasiKaryawan from './pages/Admin/RealisasiKaryawan';
+import SimpananDetail from './pages/Admin/SimpananDetail';
 
 function App() {
   return (
@@ -63,6 +64,7 @@ function App() {
           <Route path="members" element={<MemberList />} />
           <Route path="add-member" element={<AddMember />} />
           <Route path="monitor-simpanan" element={<MonitorSimpanan />} />
+          <Route path="monitor-simpanan/:id" element={<SimpananDetail />} />
           <Route path="monitor-pinjaman" element={<MonitorPinjaman />} />
           <Route path="monitor-angsuran" element={<MonitorAngsuran />} />
           <Route path="reports" element={<AdminReports />} />

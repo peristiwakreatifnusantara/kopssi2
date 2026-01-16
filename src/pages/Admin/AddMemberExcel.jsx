@@ -11,12 +11,11 @@ const AddMemberExcel = ({ onSave, isProcessing }) => {
     const handleDownloadTemplate = () => {
         const title = ['NEW MEMBER KOPSSI'];
         const headers = [
-            'Nama Lengkap', 'Status Simp. Anggota', 'NPP', 'Unit Kerja',
+            'Nama Lengkap', 'NPP', 'Unit Kerja',
             'Jabatan', 'PT', 'OPS', 'Lokasi', 'Tagihan Parkir (Y/N)',
             'Tempat Lahir', 'Tgl Lahir (YYYY-MM-DD)', 'Alamat', 'Alamat Tinggal',
             'NIK', 'Telp Rumah 1', 'Telp Rumah 2', 'Email', 'Hp 1', 'Hp 2',
-            'Rek Pribadi', 'Rek Gaji', 'Bank Gaji', 'Jenis Kelamin (Laki-laki/Perempuan)',
-            'Keluar Anggota (Y/N)', 'Tgl Keluar (YYYY-MM-DD)', 'Sebab Keluar', 'Keterangan'
+            'Rek Pribadi', 'Rek Gaji', 'Bank Gaji', 'Jenis Kelamin (Laki-laki/Perempuan)'
         ];
 
         const data = [title, headers];
@@ -164,7 +163,7 @@ const AddMemberExcel = ({ onSave, isProcessing }) => {
                     no_anggota: newNoAnggota,
                     join_date: joinDate,
                     full_name: row['Nama Lengkap'],
-                    'status_simp_anggota': row['Status Simp. Anggota'] || 'AKTIF',
+                    'status_simp_anggota': 'AKTIF',
                     'no_npp': String(row['NPP'] || ''),
                     'work_unit': row['Unit Kerja'],
                     'jabatan': row['Jabatan'],
@@ -186,10 +185,10 @@ const AddMemberExcel = ({ onSave, isProcessing }) => {
                     'rek_gaji': String(row['Rek Gaji'] || ''),
                     'bank_gaji': row['Bank Gaji'],
                     'jenis_kelamin': row['Jenis Kelamin (Laki-laki/Perempuan)'],
-                    'keluar_anggota': row['Keluar Anggota (Y/N)'],
-                    'tanggal_keluar': row['Tgl Keluar (YYYY-MM-DD)'],
-                    'sebab_keluar': row['Sebab Keluar'],
-                    'keterangan': row['Keterangan']
+                    'keluar_anggota': 'N',
+                    'tanggal_keluar': '',
+                    'sebab_keluar': '',
+                    'keterangan': ''
                 };
 
                 try {

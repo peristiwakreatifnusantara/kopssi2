@@ -26,6 +26,12 @@ const formatDate = (dateString) => {
     });
 };
 
+const diffMonths = (d1, d2) => {
+    const date1 = new Date(d1);
+    const date2 = new Date(d2);
+    return (date2.getFullYear() - date1.getFullYear()) * 12 + (date2.getMonth() - date1.getMonth());
+};
+
 export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystName = 'Admin', customData = null) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -56,7 +62,8 @@ export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystN
         .from('pinjaman')
         .select('*, bunga:bunga_id(*)')
         .eq('personal_data_id', loan.personal_data_id)
-        .in('status', ['DICAIRKAN', 'DISETUJUI']);
+        .eq('status', 'DICAIRKAN')
+        .neq('id', loan.id);
 
     const outstandingData = [];
     let grandOutstanding = 0;
@@ -66,45 +73,59 @@ export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystN
 
     if (activeLoans) {
         for (const al of activeLoans) {
-            const { data: ang } = await supabase
+            // Calculate outstanding based on UNPAID installments matching Realisasi logic
+            const { data: unpaidInsts } = await supabase
                 .from('angsuran')
                 .select('*')
-                .eq('pinjaman_id', al.id);
+                .eq('pinjaman_id', al.id)
+                .eq('status', 'UNPAID');
 
-            const paidCount = ang ? ang.filter(a => a.status === 'PAID').length : 0;
-            const remainingCount = al.tenor_bulan - paidCount;
+            if (unpaidInsts && unpaidInsts.length > 0) {
+                const principal = parseFloat(al.jumlah_pinjaman);
+                const tenor = al.tenor_bulan;
 
-            const principal = parseFloat(al.jumlah_pinjaman);
-            const tenor = al.tenor_bulan;
+                // Calculate paid count from total tenor - unpaid length
+                const paidCount = tenor - unpaidInsts.length;
 
-            let totalBunga = 0;
-            if (al.tipe_bunga === 'PERSENAN') {
-                totalBunga = principal * (parseFloat(al.nilai_bunga) / 100) * (tenor / 12);
-            } else if (al.tipe_bunga === 'NOMINAL') {
-                totalBunga = parseFloat(al.nilai_bunga);
+                let oPokok = 0;
+                let oBunga = 0;
+
+                // Calculate total interest per loan for rate calculation
+                let totalInterestLoan = 0;
+                if (al.tipe_bunga === 'PERSENAN') {
+                    totalInterestLoan = principal * (parseFloat(al.nilai_bunga || 0) / 100) * (tenor / 12);
+                } else if (al.tipe_bunga === 'NOMINAL') {
+                    totalInterestLoan = parseFloat(al.nilai_bunga || 0);
+                }
+
+                // Sum up outstanding from unpaid installments
+                // Logic derived from RealisasiKaryawan:
+                // oBunga += (totalInterestLoan / tenor)
+                // oPokok += (principal / tenor)
+                unpaidInsts.forEach(() => {
+                    oBunga += (totalInterestLoan / tenor);
+                    oPokok += (principal / tenor);
+                });
+
+                const totalBayar = principal + totalInterestLoan;
+                const angBln = Math.ceil(totalBayar / tenor);
+
+                const remPrincipal = oPokok;
+                const remBunga = oBunga;
+
+                outstandingData.push([
+                    al.no_pinjaman,
+                    (al.jenis_pinjaman || 'BIASA').toUpperCase(),
+                    `${paidCount}/${tenor}`,
+                    Math.round(remPrincipal).toLocaleString('id-ID'),
+                    Math.round(remBunga).toLocaleString('id-ID'),
+                    angBln.toLocaleString('id-ID')
+                ]);
+
+                grandOutstanding += remPrincipal;
+                grandBunga += remBunga;
+                grandAngBln += angBln;
             }
-
-            const totalBayar = principal + totalBunga;
-            const angBln = Math.ceil(totalBayar / tenor);
-
-            const remPrincipal = (principal / tenor) * remainingCount;
-            const remBunga = (totalBunga / tenor) * remainingCount;
-            const remTotal = angBln * remainingCount;
-
-            outstandingData.push([
-                al.no_pinjaman,
-                (al.jenis_pinjaman || 'BIASA').toUpperCase(),
-                `${paidCount}/${tenor}`,
-                Math.round(remPrincipal).toLocaleString('id-ID'),
-                Math.round(remBunga).toLocaleString('id-ID'),
-                Math.round(remTotal).toLocaleString('id-ID'),
-                angBln.toLocaleString('id-ID')
-            ]);
-
-            grandOutstanding += remPrincipal;
-            grandBunga += remBunga;
-            grandTotal += remTotal;
-            grandAngBln += angBln;
         }
     }
 
@@ -120,117 +141,152 @@ export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystN
     doc.setLineWidth(0.5);
     doc.line(margin, 45, pageWidth - margin, 45);
 
-    // No Permohonan
+    // No Permohonan Block (Top Right in original/standard, but layout requested puts it there)
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text('No Permohonan', 130, 55);
-    doc.text(': ' + loan.no_pinjaman, 160, 55);
-    doc.text('Tgl Permohonan', 130, 60);
-    doc.text(': ' + formatDate(loan.created_at), 160, 60);
+    doc.text('No Permohonan', 130, 52);
+    doc.text(': ' + loan.no_pinjaman, 160, 52);
+    doc.text('Tgl Permohonan', 130, 57);
+    doc.text(': ' + formatDate(loan.created_at), 160, 57);
 
-    // Member Info
-    const infoY = 75;
-    const leftColX = margin;
-    const labelX = leftColX + 40;
+    // Member Info Layout
+    const infoY = 55;
+    const col1X = margin;
+    const col1LabelW = 35;
+    const col1ValX = col1X + col1LabelW;
 
-    const memberInfo = [
-        ['No Anggota', '-'],
+    const col2X = 110;
+    // Actually the requested design has a split layout for some items
+
+    // Left side items
+    const leftItems = [
+        ['No Anggota', loan.personal_data?.no_anggota || '-'],
         ['NPP', loan.personal_data?.no_npp || '-'],
         ['Nama Lengkap', loan.personal_data?.full_name || '-'],
         ['Alamat', loan.personal_data?.address || '-'],
-        ['Tempat Lahir', '-'],
+        ['Tempat Lahir', loan.personal_data?.tempat_lahir || '-'], // Can combine with Tgl Lahir
         ['Unit Kerja', loan.personal_data?.work_unit || '-'],
         ['Status Pegawai', loan.personal_data?.employment_status || '-'],
         ['Tgl Keanggotaan', formatDate(loan.personal_data?.created_at)]
     ];
 
-    memberInfo.forEach((item, i) => {
-        const y = infoY + (i * 6);
-        doc.text(item[0], leftColX, y);
-        doc.text(':', labelX - 5, y);
-        doc.text(item[1], labelX, y);
+    let currentY = infoY;
+    leftItems.forEach((item) => {
+        currentY += 5;
+        doc.text(item[0], col1X, currentY);
+        doc.text(':', col1ValX - 2, currentY);
+
+        let val = item[1];
+        if (item[0] === 'Tempat Lahir' && loan.personal_data?.tanggal_lahir) {
+            // Split across page?
+            // The image shows "Tempat Lahir : ...   Tgl Lahir : ...   Usia : ..."
+            // This is tricky. Let's just print simple for now or try to match.
+            // If "Tempat Lahir", we print Value then Tgl Lahir next to it.
+            const tglLahir = formatDate(loan.personal_data.tanggal_lahir);
+
+            // Calculate Age roughly
+            const dob = new Date(loan.personal_data.tanggal_lahir);
+            const ageDiff = Date.now() - dob.getTime();
+            const ageDate = new Date(ageDiff);
+            const age = Math.abs(ageDate.getUTCFullYear() - 1970);
+
+            doc.text(val, col1ValX, currentY);
+            doc.text('Tgl Lahir : ' + tglLahir, col1ValX + 50, currentY);
+            doc.text('Usia : ' + age + ' Tahun', col1ValX + 110, currentY);
+            return;
+        }
+
+        if (item[0] === 'Tgl Keanggotaan') {
+            const joinDate = loan.personal_data?.join_date || loan.personal_data?.created_at;
+            const lamaBulan = joinDate ? diffMonths(joinDate, new Date()) : 0;
+
+            doc.text(formatDate(joinDate), col1ValX, currentY);
+            // Right side items aligned with this
+            // Rekening info seems to be here in the image
+            // We can place it manually or relative
+
+            // "Lama Keanggotaan : ... Bulan" aligned rightish
+            // doc.text(`Lama Keanggotaan : ${lamaBulan} Bulan`, 110, currentY); // Keeping this or removing? User said "until Tgl Keanggotaan". 
+            // Let's keep Lama Keanggotaan as it is part of the date context usually, but remove accounts.
+            doc.text(`Lama Keanggotaan : ${lamaBulan} Bulan`, 110, currentY);
+            return;
+        }
+
+        doc.text(val.toString(), col1ValX, currentY);
+
+        if (item[0] === 'Status Pegawai') {
+            // Add Masa Kerja if available? The image shows "Masa Kerja : -"
+            // We don't have masa kerja calculated easily usually unless from join_date of work?
+            // Just hardcode placeholder or omit if not in data
+            doc.text('Masa Kerja : -', 130, currentY);
+        }
     });
 
     // Data Simpanan
-    const savingsY = infoY + (memberInfo.length * 6) + 10;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Data Simpanan', leftColX, savingsY);
+    currentY += 10;
+    doc.setFont('helvetica', 'underline');
+    doc.text('Data Simpanan', col1X, currentY);
     doc.setFont('helvetica', 'normal');
 
-    const savingsItems = [
-        ['Pokok', savingsByType.POKOK],
-        ['Wajib', savingsByType.WAJIB],
-        ['Total Simpanan', totalSavings]
-    ];
+    const savingsY = currentY + 5;
+    doc.text('Pokok', col1X, savingsY);
+    doc.text(savingsByType.POKOK.toLocaleString('id-ID'), col1ValX + 20, savingsY, { align: 'right' });
 
-    savingsItems.forEach((item, i) => {
-        const y = savingsY + 6 + (i * 6);
-        doc.text(item[0], leftColX, y);
-        doc.text(parseFloat(item[1]).toLocaleString('id-ID'), labelX + 20, y, { align: 'right' });
-        if (item[0] === 'Total Simpanan') {
-            doc.line(labelX, y - 4, labelX + 25, y - 4);
-        }
-    });
+    doc.text('Wajib', col1X, savingsY + 5);
+    doc.text(savingsByType.WAJIB.toLocaleString('id-ID'), col1ValX + 20, savingsY + 5, { align: 'right' });
 
-    // Data Pinjaman (Outstanding Table)
-    const activeLoanY = savingsY + 35;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Data Pinjaman (Berjalan)', leftColX, activeLoanY);
+    doc.text('Total Simpanan', col1X, savingsY + 10);
+    doc.text(totalSavings.toLocaleString('id-ID'), col1ValX + 20, savingsY + 10, { align: 'right' });
+
+    // Data Pinjaman Table
+    currentY = savingsY + 20;
+    doc.setFont('helvetica', 'underline');
+    doc.text('Data Pinjaman', col1X, currentY);
+    doc.setFont('helvetica', 'normal');
 
     autoTable(doc, {
-        startY: activeLoanY + 2,
-        margin: { left: margin, right: margin },
-        head: [['No SP', 'Jenis Pinjaman', 'Ang. Ke/dr', 'Outstanding', 'Bunga', 'Total', 'Ang. / Bln']],
-        body: [
-            ...outstandingData,
-            [{ content: 'Jumlah', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+        startY: currentY + 5,
+        head: [['No Pinjaman', 'Jenis Pinjaman', 'Angsuran Terbayar', 'Outstanding', 'Bunga Outstanding', 'Angsuran / Bln']],
+        body: outstandingData,
+        foot: [['TOTAL', '', '',
             Math.round(grandOutstanding).toLocaleString('id-ID'),
             Math.round(grandBunga).toLocaleString('id-ID'),
-            Math.round(grandTotal).toLocaleString('id-ID'),
-            Math.round(grandAngBln).toLocaleString('id-ID')]
-        ],
-        theme: 'plain',
-        styles: { fontSize: 8, cellPadding: 1 },
-        headStyles: { fontStyle: 'bold', borderBottom: { width: 0.5, color: [0, 0, 0] } },
+            Math.round(grandAngBln).toLocaleString('id-ID')
+        ]],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [200, 200, 200], textColor: 0, fontStyle: 'bold', halign: 'center' },
+        footStyles: { fillColor: [200, 200, 200], textColor: 0, fontStyle: 'bold', halign: 'right' },
         columnStyles: {
+            0: { halign: 'left' },
+            1: { halign: 'left' },
+            2: { halign: 'center' },
             3: { halign: 'right' },
             4: { halign: 'right' },
-            5: { halign: 'right' },
-            6: { halign: 'right' }
-        }
+            5: { halign: 'right' }
+        },
+        margin: { left: margin, right: margin },
     });
 
-    // Data Pinjaman (New Permohonan)
-    const loanY = doc.lastAutoTable.finalY + 10;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Analisa Permohonan Baru', leftColX, loanY);
-    doc.setFont('helvetica', 'normal');
-
-    // Use custom assessment data if provided, otherwise fallback to loan defaults
+    // Data Topup & Angsuran Section
+    // Calculate new loan details
     const principal = customData && customData.amount ? parseFloat(customData.amount) : parseFloat(loan.jumlah_pinjaman);
-    const tenor = loan.tenor_bulan;
+    const tenor = loan.tenor_bulan; // Or customData if editable
 
     let totalBunga = 0;
-    let labelBunga = '0%';
-
     if (customData && customData.useInterest) {
         if (customData.interestType === 'PERSENAN') {
             const rate = parseFloat(customData.interestValue || 0);
             totalBunga = principal * (rate / 100) * (tenor / 12);
-            labelBunga = `${rate}% (Flat/Thn)`;
         } else {
             totalBunga = parseFloat(customData.interestValue || 0);
-            labelBunga = `Rp ${totalBunga.toLocaleString('id-ID')} (Nominal)`;
         }
     } else if (!customData && loan.tipe_bunga && loan.tipe_bunga !== 'NONE') {
-        // Fallback to loan saved state if no customData passed
         if (loan.tipe_bunga === 'PERSENAN') {
             const rate = parseFloat(loan.nilai_bunga || 0);
             totalBunga = principal * (rate / 100) * (tenor / 12);
-            labelBunga = `${rate}% (Flat/Thn)`;
         } else {
             totalBunga = parseFloat(loan.nilai_bunga || 0);
-            labelBunga = `Rp ${totalBunga.toLocaleString('id-ID')} (Nominal)`;
         }
     }
 
@@ -238,37 +294,66 @@ export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystN
     const totalKewajiban = principal + roundedBunga;
     const cicilan = Math.ceil(totalKewajiban / tenor);
 
-    autoTable(doc, {
-        startY: loanY + 2,
-        margin: { left: margin, right: margin },
-        head: [['Keterangan Analisa', 'Detail Nilai']],
-        body: [
-            ['Permohonan Pinjaman (Member)', `Rp ${parseFloat(loan.jumlah_pengajuan || loan.jumlah_pinjaman).toLocaleString('id-ID')}`],
-            ['Nominal Pinjaman (Analisa)', `Rp ${principal.toLocaleString('id-ID')} (${numberToWords(principal).toUpperCase()} RUPIAH)`],
-            ['Jangka Waktu (Tenor)', `${tenor} Bulan`],
-            ['Suku Bunga / Margin', labelBunga],
-            ['Total Bunga / Margin', `Rp ${roundedBunga.toLocaleString('id-ID')}`],
-            ['Total Kewajiban', `Rp ${totalKewajiban.toLocaleString('id-ID')} (${numberToWords(totalKewajiban).toUpperCase()} RUPIAH)`],
-            ['Angsuran Per Bulan', `Rp ${cicilan.toLocaleString('id-ID')}`],
-            ['Jenis Pinjaman', (loan.jenis_pinjaman || 'BIASA').toUpperCase()],
-            ['Keperluan', loan.keperluan || '-']
-        ],
-        theme: 'plain',
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fontStyle: 'bold', borderBottom: { width: 0.5, color: [0, 0, 0] } },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 50 },
-            1: { halign: 'left' }
-        }
-    });
+    let nextY = doc.lastAutoTable.finalY + 10;
+
+    // Permohonan Pinjaman Section
+    doc.setFont('helvetica', 'underline');
+    doc.text('Permohonan Pinjaman', col1X, nextY);
+    doc.setFont('helvetica', 'normal');
+
+    nextY += 5;
+    doc.text('Jumlah Pinjaman', col1X, nextY);
+    doc.text(`: Rp.${principal.toLocaleString('id-ID')}`, 60, nextY);
+    doc.text(`(${numberToWords(principal).toUpperCase()} )`, 110, nextY);
+
+    nextY += 5;
+    doc.text('Jangka Waktu', col1X, nextY);
+    doc.text(`: ${tenor} Bulan`, 60, nextY);
+
+    // Data Angsuran
+    nextY += 10;
+    doc.setFont('helvetica', 'underline');
+    doc.text('Data Angsuran', col1X, nextY);
+    doc.setFont('helvetica', 'normal');
+
+    // Pendapat Analis Kredit block on the right?
+    const analisX = 110;
+    doc.setFont('helvetica', 'underline');
+    doc.text('Pendapat Analis Kredit :', analisX, nextY);
+    doc.setFont('helvetica', 'normal');
+    doc.text('-', analisX, nextY + 5);
+
+    nextY += 5;
+    doc.text('Angsuran dilunasi', col1X, nextY);
+    // Hardcoded to 0 as per instruction unless we have refinance logic (not requested to implement deep logic, just visual)
+    doc.text(':', 60, nextY);
+    doc.text('0', 80, nextY, { align: 'right' });
+
+    nextY += 5;
+    doc.text('Total Angsuran', col1X, nextY);
+    doc.text(':', 60, nextY);
+    doc.text(cicilan.toLocaleString('id-ID'), 80, nextY, { align: 'right' });
+
+    nextY += 5;
+    doc.text('Jangka Waktu', col1X, nextY);
+    doc.text(`: ${tenor} Bulan`, 60, nextY);
+
+    nextY += 5;
+    doc.text('Jenis Pinjaman', col1X, nextY);
+    doc.text(`: ${(loan.jenis_pinjaman || 'BARANG').toUpperCase()}`, 60, nextY);
+
+    nextY += 5;
+    doc.text('Untuk Keperluan', col1X, nextY);
+    doc.text(`: ${loan.keperluan || '-'}`, 60, nextY);
 
     // Signatures
-    const sigY = doc.lastAutoTable.finalY + 30;
-    const sigCol = pageWidth / 4;
+    const sigY = nextY + 25;
+    doc.text('Disposisi :', col1X, sigY - 10);
 
-    doc.text('Ketua', sigCol, sigY, { align: 'center' });
-    doc.text('Bendahara', sigCol * 2, sigY, { align: 'center' });
-    doc.text('Sekretaris', sigCol * 3, sigY, { align: 'center' });
+    const colSigWidth = pageWidth / 4;
+    doc.text('Ketua', colSigWidth, sigY, { align: 'center' });
+    doc.text('Bendahara', colSigWidth * 2, sigY, { align: 'center' });
+    doc.text('Sekretaris', colSigWidth * 3, sigY, { align: 'center' });
 
     if (isDownload) {
         doc.save(`Analisa_Pinjaman_${loan.no_pinjaman}.pdf`);

@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Search, Filter, CheckCircle, XCircle, Clock, Banknote, User, Download, FileText } from 'lucide-react';
+import { Search, Filter, Download, ArrowRight, User, Building, Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const MonitorSimpanan = () => {
-    const [bills, setBills] = useState([]);
+    const navigate = useNavigate();
+    const [members, setMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('ALL');
-    const [startDate, setStartDate] = useState(() => {
-        const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-    });
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [filterCompany, setFilterCompany] = useState('ALL');
     const [companies, setCompanies] = useState([]);
-    const [showExportMenu, setShowExportMenu] = useState(false);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const pageOptions = [10, 20, 50, 100];
+
+    useEffect(() => {
+        fetchCompanies();
+        fetchMemberSavings();
+    }, []);
 
     const fetchCompanies = async () => {
         try {
@@ -35,111 +35,84 @@ const MonitorSimpanan = () => {
         }
     };
 
-    useEffect(() => {
-        fetchBills();
-        fetchCompanies();
-    }, [startDate, endDate]);
-
-    const fetchBills = async () => {
+    const fetchMemberSavings = async () => {
         try {
             setLoading(true);
 
-            const start = `${startDate}T00:00:00`;
-            const end = `${endDate}T23:59:59`;
+            // Fetch Active & Passive Members Only
+            const { data: membersData, error: memberError } = await supabase
+                .from('personal_data')
+                .select('id, full_name, nik, no_npp, company, work_unit')
+                .in('status', [
+                    'ACTIVE', 'ACTIVED', 'VERIFIED', 'active', 'verified', 'DONE VERIFIKASI',
+                    'PASIF'
+                ]);
 
-            const { data, error } = await supabase
+            if (memberError) throw memberError;
+
+            // Fetch All PAID Savings (Aggregated)
+            // Note: For large datasets, this should be done via RPC or View.
+            // Assuming manageable size for client-side aggregation for now.
+            const { data: savingsData, error: savingsError } = await supabase
                 .from('simpanan')
-                .select(`
-                    *,
-                    personal_data:personal_data_id (
-                        full_name,
-                        nik,
-                        work_unit,
-                        company
-                    )
-                `)
-                .gte('jatuh_tempo', start)
-                .lte('jatuh_tempo', end)
-                .order('jatuh_tempo', { ascending: true });
+                .select('personal_data_id, amount, transaction_type')
+                .eq('status', 'PAID');
 
-            if (error) throw error;
+            if (savingsError) throw savingsError;
 
-            // Group by personal_data_id and bulan_ke
-            const grouped = {};
-            (data || []).forEach(item => {
-                const key = `${item.personal_data_id}_${item.bulan_ke}`;
-                if (!grouped[key]) {
-                    grouped[key] = {
-                        id: key,
-                        personal_data_id: item.personal_data_id,
-                        personal_data: item.personal_data,
-                        bulan_ke: item.bulan_ke,
-                        jatuh_tempo: item.jatuh_tempo,
-                        amount_pokok: 0,
-                        amount_wajib: 0,
-                        status: item.status,
-                        items: []
-                    };
+            // Aggregate Savings per Member
+            const savingsMap = {};
+            savingsData?.forEach(s => {
+                const amt = parseFloat(s.amount || 0);
+                if (!savingsMap[s.personal_data_id]) savingsMap[s.personal_data_id] = 0;
+
+                if (s.transaction_type === 'SETOR') {
+                    savingsMap[s.personal_data_id] += amt;
+                } else {
+                    savingsMap[s.personal_data_id] -= amt;
                 }
-                if (item.type === 'POKOK') {
-                    grouped[key].amount_pokok = parseFloat(item.amount || 0);
-                }
-                if (item.type === 'WAJIB') {
-                    grouped[key].amount_wajib = parseFloat(item.amount || 0);
-                }
-                if (item.type === 'SUKARELA') {
-                    grouped[key].amount_sukarela = parseFloat(item.amount || 0);
-                }
-                grouped[key].items.push(item);
             });
 
-            setBills(Object.values(grouped));
+            // Merge Data
+            const mergedData = membersData.map(m => ({
+                ...m,
+                total_simpanan: savingsMap[m.id] || 0
+            }));
+
+            // Sort by Name
+            mergedData.sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+            setMembers(mergedData);
         } catch (error) {
-            console.error('Error fetching bills:', error);
-            alert('Gagal memuat data tagihan simpanan');
+            console.error('Error fetching data:', error);
+            alert('Gagal memuat data monitoring simpanan');
         } finally {
             setLoading(false);
         }
     };
 
-    // bulk insert workflow replaces manual mark as paid
-
-    const handleExportExcel = async (mode = 'DATA') => {
-        try {
-            const { exportMonitoringSimpanan } = await import('../../utils/reportExcel');
-
-            if (mode === 'TEMPLATE') {
-                const { data: members } = await supabase
-                    .from('personal_data')
-                    .select('nik, full_name')
-                    .eq('status', 'active');
-
-                exportMonitoringSimpanan(members || [], {}, 'TEMPLATE');
-            } else {
-                exportMonitoringSimpanan(filteredBills, { startDate, endDate }, 'DATA');
-            }
-            setShowExportMenu(false);
-        } catch (err) {
-            console.error('Excel export error:', err);
-        }
+    const handleExportExcel = async () => {
+        // TODO: Implement Logic to export Member Savings Summary
+        alert("Fitur Export Summary akan segera hadir.");
     };
 
-    const filteredBills = bills.filter(bill => {
-        const matchesSearch = bill.personal_data?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            bill.personal_data?.nik?.includes(searchTerm);
+    const filteredMembers = members.filter(m => {
+        const matchesSearch = m.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            m.no_npp?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            m.nik?.includes(searchTerm);
 
-        const matchesCompany = filterCompany === 'ALL' || bill.personal_data?.company === filterCompany;
+        const matchesCompany = filterCompany === 'ALL' || m.company === filterCompany;
 
         return matchesSearch && matchesCompany;
     });
 
     // Pagination Calculation
-    const totalPages = Math.ceil(filteredBills.length / itemsPerPage);
-    const paginatedBills = filteredBills.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const totalPages = Math.ceil(filteredMembers.length / itemsPerPage);
+    const paginatedMembers = filteredMembers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, filterCompany, startDate, endDate]);
+    }, [searchTerm, filterCompany]);
 
     const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
@@ -147,41 +120,27 @@ const MonitorSimpanan = () => {
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Monitoring Simpanan</h2>
-                    <p className="text-sm text-gray-500 mt-1">Lacak dan kelola pembayaran iuran wajib & pokok anggota</p>
+                    <h2 className="text-2xl font-black text-gray-900 italic uppercase tracking-tight">Monitoring Simpanan</h2>
+                    <p className="text-sm text-gray-500 mt-1">Pantau total simpanan anggota dan riwayat transaksi</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input
                             type="text"
-                            placeholder="Cari nama atau NIK..."
+                            placeholder="Cari Nama / NPP..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full md:w-64 text-sm"
+                            className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full md:w-64 text-sm shadow-sm font-medium"
                         />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
-                        />
-                        <span className="text-gray-400 font-bold">s/d</span>
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-bold"
-                        />
-                    </div>
+
                     <div className="relative">
                         <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                         <select
                             value={filterCompany}
                             onChange={(e) => setFilterCompany(e.target.value)}
-                            className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white appearance-none font-bold uppercase tracking-tight italic"
+                            className="pl-9 pr-8 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white shadow-sm appearance-none font-bold uppercase tracking-tight italic"
                         >
                             <option value="ALL">SEMUA PT</option>
                             {companies.map(c => (
@@ -189,112 +148,81 @@ const MonitorSimpanan = () => {
                             ))}
                         </select>
                     </div>
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowExportMenu(!showExportMenu)}
-                            className="px-4 py-2 bg-white text-emerald-600 border border-emerald-200 rounded-lg text-sm font-semibold hover:bg-emerald-50 transition-colors flex items-center gap-2 shadow-sm"
-                        >
-                            <Download size={16} /> Export
-                        </button>
-                        {showExportMenu && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-lg shadow-xl z-20 overflow-hidden">
-                                <button
-                                    onClick={() => handleExportExcel('DATA')}
-                                    className="w-full text-left px-4 py-3 text-xs font-bold text-gray-700 hover:bg-emerald-50 border-b border-gray-50 flex items-center gap-2"
-                                >
-                                    <FileText size={14} className="text-emerald-500" /> Unduh Data Aktif
-                                </button>
-                                <button
-                                    onClick={() => handleExportExcel('TEMPLATE')}
-                                    className="w-full text-left px-4 py-3 text-xs font-bold text-gray-700 hover:bg-emerald-50 flex items-center gap-2"
-                                >
-                                    <Download size={14} className="text-blue-500" /> Unduh Template Upload
-                                </button>
-                            </div>
-                        )}
-                    </div>
+
+                    {/* Export could be re-enabled if needed */}
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 text-[11px] font-black uppercase tracking-widest">
                             <tr>
-                                <th className="px-6 py-4 font-black">Anggota</th>
-                                <th className="px-6 py-4 font-black text-center">Bulan Ke</th>
-                                <th className="px-6 py-4 font-black">Jatuh Tempo</th>
-                                <th className="px-6 py-4 font-black text-right">Simp. Pokok</th>
-                                <th className="px-6 py-4 font-black text-right">Simp. Wajib</th>
-                                <th className="px-6 py-4 font-black text-right">Simp. Sukarela</th>
-                                <th className="px-6 py-4 font-black text-right">Total</th>
-                                <th className="px-6 py-4 font-black text-center">Status</th>
+                                <th className="px-6 py-4">Anggota</th>
+                                <th className="px-6 py-4">Perusahaan</th>
+                                <th className="px-6 py-4 text-right">Total Simpanan</th>
+                                <th className="px-6 py-4 text-center">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 italic">
+                        <tbody className="divide-y divide-gray-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-                                        Memuat data...
+                                        Memuat data anggota...
                                     </td>
                                 </tr>
-                            ) : filteredBills.length === 0 ? (
+                            ) : filteredMembers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
-                                        <Clock className="mx-auto text-gray-300 mb-4" size={48} />
-                                        <p>Tidak ada tagihan ditemukan</p>
+                                    <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                                        <User className="mx-auto text-gray-300 mb-4" size={48} />
+                                        <p>Tidak ada anggota ditemukan</p>
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedBills.map((bill) => {
-                                    const total = parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0);
-                                    return (
-                                        <tr key={bill.id} className="hover:bg-emerald-50/20 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-black text-gray-900 not-italic uppercase tracking-tighter">
-                                                        {bill.personal_data?.full_name || '-'}
-                                                    </span>
-                                                    <span className="text-[10px] text-gray-400 font-mono">
-                                                        {bill.personal_data?.nik || '-'}
-                                                    </span>
+                                paginatedMembers.map((m) => (
+                                    <tr
+                                        key={m.id}
+                                        className="hover:bg-emerald-50/30 transition-colors group cursor-pointer"
+                                        onClick={() => navigate(`/admin/monitor-simpanan/${m.id}`)}
+                                    >
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold text-xs">
+                                                    {m.full_name?.substring(0, 2)}
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="px-2 py-1 bg-gray-100 rounded-md text-[10px] font-black text-gray-500">
-                                                    #{bill.bulan_ke}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-gray-600 text-xs font-bold">
-                                                {new Date(bill.jatuh_tempo).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
-                                                {formatCurrency(bill.amount_pokok)}
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
-                                                {formatCurrency(bill.amount_wajib)}
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-xs font-medium text-gray-500 font-mono">
-                                                {formatCurrency(bill.amount_sukarela || 0)}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="text-sm font-black text-gray-800 font-mono">
-                                                    {formatCurrency(parseFloat(bill.amount_pokok || 0) + parseFloat(bill.amount_wajib || 0) + parseFloat(bill.amount_sukarela || 0))}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${bill.status === 'PAID'
-                                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                                    : 'bg-amber-100 text-amber-700 border-amber-200'
-                                                    }`}>
-                                                    {bill.status === 'PAID' ? <CheckCircle size={10} /> : <Clock size={10} />}
-                                                    {bill.status === 'PAID' ? 'LUNAS' : 'PENDING'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
+                                                <div>
+                                                    <p className="text-sm font-black text-gray-900 uppercase tracking-tight">{m.full_name}</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                                                        <User size={10} /> {m.no_npp}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase tracking-tight">
+                                                <Building size={14} className="text-gray-400" />
+                                                {m.company || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="text-sm font-black text-emerald-600 font-mono tracking-tight bg-emerald-50 px-3 py-1 rounded-lg">
+                                                {formatCurrency(m.total_simpanan)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/admin/monitor-simpanan/${m.id}`);
+                                                }}
+                                                className="p-2 bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all shadow-sm"
+                                            >
+                                                <ArrowRight size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
                             )}
                         </tbody>
                     </table>
@@ -303,15 +231,15 @@ const MonitorSimpanan = () => {
                 {/* PAGINATION FOOTER */}
                 <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-4 text-xs font-black text-gray-400 uppercase tracking-widest">
-                        <span>Tampilkan</span>
+                        <span>Show</span>
                         <select
                             value={itemsPerPage}
                             onChange={(e) => setItemsPerPage(Number(e.target.value))}
                             className="bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-emerald-600 shadow-sm"
                         >
-                            {pageOptions.map(opt => <option key={opt} value={opt}>{opt} Data</option>)}
+                            {pageOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
-                        <span className="hidden md:block">| Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredBills.length)} dari {filteredBills.length} data</span>
+                        <span className="hidden md:block">| {filteredMembers.length} Total Data</span>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -320,25 +248,17 @@ const MonitorSimpanan = () => {
                             disabled={currentPage === 1}
                             className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
                         >
-                            Sebelumnya
+                            Prev
                         </button>
-                        <div className="flex items-center gap-1">
-                            {[...Array(totalPages)].map((_, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => setCurrentPage(i + 1)}
-                                    className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === i + 1 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200Scale-110' : 'bg-white text-gray-400 hover:bg-gray-50 border border-gray-100'}`}
-                                >
-                                    {i + 1}
-                                </button>
-                            )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
-                        </div>
+                        <span className="text-xs font-black text-emerald-600 mx-2">
+                            Page {currentPage} of {Math.max(1, totalPages)}
+                        </span>
                         <button
                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                             disabled={currentPage === totalPages || totalPages === 0}
                             className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
                         >
-                            Berikutnya
+                            Next
                         </button>
                     </div>
                 </div>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, MoreHorizontal, X, User, Phone, Briefcase, MapPin, CreditCard, Calendar, Plus, Upload, Loader2, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, X, User, Phone, Briefcase, MapPin, CreditCard, Calendar, Plus, Upload, Loader2, CheckCircle2, AlertCircle, Trash2, UserMinus } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 
-const MemberDetailModal = ({ member, onClose, onDeactivate }) => {
+const MemberDetailModal = ({ member, onClose, onDeactivate, onSetPassive }) => {
     if (!member) return null;
 
     const sections = [
@@ -106,16 +106,28 @@ const MemberDetailModal = ({ member, onClose, onDeactivate }) => {
 
                 <div className="p-4 border-t border-gray-100 bg-white flex justify-end gap-3">
                     {(member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified' || !member.status) && (
-                        <button
-                            onClick={() => {
-                                if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?\n\nSeluruh simpanan akan dikembalikan dan pinjaman berjalan akan diperhitungkan.`)) {
-                                    onDeactivate(member.id);
-                                }
-                            }}
-                            className="px-6 py-2 rounded-lg bg-red-50 text-red-600 border border-red-100 text-sm font-bold hover:bg-red-100 transition-colors uppercase tracking-tight"
-                        >
-                            Non-Aktifkan Anggota
-                        </button>
+                        <>
+                            <button
+                                onClick={() => {
+                                    if (window.confirm(`Apakah Anda yakin ingin MEMASIFKAN anggota ${member.full_name}?`)) {
+                                        onSetPassive(member.id);
+                                    }
+                                }}
+                                className="px-6 py-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-sm font-bold hover:bg-amber-100 transition-colors uppercase tracking-tight"
+                            >
+                                Pasifkan Anggota
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?\n\nSeluruh simpanan akan dikembalikan dan pinjaman berjalan akan diperhitungkan.`)) {
+                                        onDeactivate(member.id);
+                                    }
+                                }}
+                                className="px-6 py-2 rounded-lg bg-red-50 text-red-600 border border-red-100 text-sm font-bold hover:bg-red-100 transition-colors uppercase tracking-tight"
+                            >
+                                Non-Aktifkan Anggota
+                            </button>
+                        </>
                     )}
                     <button
                         onClick={onClose}
@@ -138,11 +150,32 @@ const MemberList = () => {
     const [companies, setCompanies] = useState([]);
     const [selectedMember, setSelectedMember] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-    const [isDeactivating, setIsDeactivating] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const handleSetPassiveMember = async (memberId) => {
+        try {
+            setIsProcessing(true);
+            const { error } = await supabase
+                .from('personal_data')
+                .update({ status: 'PASIF' })
+                .eq('id', memberId);
+
+            if (error) throw error;
+
+            alert('Status anggota berhasil diubah menjadi PASIF!');
+            setIsDetailModalOpen(false);
+            fetchMembers();
+        } catch (err) {
+            console.error("Error setting member to passive:", err);
+            alert("Gagal memasifkan anggota: " + err.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleDeactivateMember = async (memberId) => {
         try {
-            setIsDeactivating(true);
+            setIsProcessing(true);
             const { error } = await supabase
                 .from('personal_data')
                 .update({
@@ -163,7 +196,7 @@ const MemberList = () => {
             console.error("Error deactivating member:", err);
             alert("Gagal menonaktifkan anggota: " + err.message);
         } finally {
-            setIsDeactivating(false);
+            setIsProcessing(false);
         }
     };
 
@@ -298,18 +331,20 @@ const MemberList = () => {
                                         <td className="px-6 py-4">
                                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic transition-all ${member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified'
                                                 ? 'bg-emerald-50 text-emerald-600'
-                                                : member.status?.toLowerCase() === 'nonaktif' || member.status?.toLowerCase() === 'non_active'
-                                                    ? 'bg-red-100 text-red-700 border border-red-200'
-                                                    : member.status?.toLowerCase() === 'rejected'
-                                                        ? 'bg-red-50 text-red-600'
-                                                        : member.status?.toLowerCase() === 'done verifikasi'
-                                                            ? 'bg-blue-50 text-blue-600'
-                                                            : 'bg-amber-50 text-amber-600'
+                                                : member.status?.toLowerCase() === 'pasif'
+                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                                    : member.status?.toLowerCase() === 'nonaktif' || member.status?.toLowerCase() === 'non_active'
+                                                        ? 'bg-red-50 text-red-600 border border-red-100'
+                                                        : member.status?.toLowerCase() === 'rejected'
+                                                            ? 'bg-red-50 text-red-600'
+                                                            : member.status?.toLowerCase() === 'done verifikasi'
+                                                                ? 'bg-blue-50 text-blue-600'
+                                                                : 'bg-amber-50 text-amber-600'
                                                 }`}>
                                                 {member.status?.toLowerCase() === 'pending' || !member.status
                                                     ? 'BELUM TERVERIFIKASI'
                                                     : member.status?.toLowerCase() === 'non_active'
-                                                        ? 'PASIF'
+                                                        ? 'NON AKTIF'
                                                         : member.status.toUpperCase()}
                                             </span>
                                         </td>
@@ -326,18 +361,32 @@ const MemberList = () => {
                                                     <MoreHorizontal size={18} />
                                                 </button>
                                                 {(member.status?.toLowerCase() === 'active' || member.status?.toLowerCase() === 'verified' || !member.status) && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?`)) {
-                                                                handleDeactivateMember(member.id);
-                                                            }
-                                                        }}
-                                                        className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-white border border-transparent hover:border-red-100"
-                                                        title="Non-Aktifkan Anggota"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (window.confirm(`Apakah Anda yakin ingin MEMASIFKAN anggota ${member.full_name}?`)) {
+                                                                    handleSetPassiveMember(member.id);
+                                                                }
+                                                            }}
+                                                            className="p-2 text-gray-400 hover:text-amber-600 transition-colors rounded-full hover:bg-white border border-transparent hover:border-amber-100"
+                                                            title="Pasifkan Anggota"
+                                                        >
+                                                            <UserMinus size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (window.confirm(`Apakah Anda yakin ingin MENONAKTIFKAN anggota ${member.full_name}?`)) {
+                                                                    handleDeactivateMember(member.id);
+                                                                }
+                                                            }}
+                                                            className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-white border border-transparent hover:border-red-100"
+                                                            title="Non-Aktifkan Anggota"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -368,9 +417,10 @@ const MemberList = () => {
                     member={selectedMember}
                     onClose={() => setIsDetailModalOpen(false)}
                     onDeactivate={handleDeactivateMember}
+                    onSetPassive={handleSetPassiveMember}
                 />
             )}
-            {isDeactivating && (
+            {isProcessing && (
                 <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px] flex items-center justify-center">
                     <Loader2 className="animate-spin text-blue-600" size={48} />
                 </div>

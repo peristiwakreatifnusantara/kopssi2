@@ -1,33 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, User, Briefcase, MapPin, Phone, CreditCard, LogOut, Calendar, BadgeCheck, Building } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
-const FormRow = ({ label1, required1, input1, label2, required2, input2, fullWidth }) => (
-    <tr className="border-b border-gray-200 hover:bg-gray-50/50 transition-colors">
-        {!fullWidth ? (
-            <>
-                <td className="py-3 px-4 bg-gray-100/50 w-[15%] align-middle">
-                    <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">{label1} {required1 && <span className="text-red-500">*</span>}</label>
-                </td>
-                <td className="py-3 px-4 w-[35%]">{input1}</td>
-                <td className="py-3 px-4 bg-gray-100/50 w-[15%] align-middle">
-                    <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">{label2} {required2 && <span className="text-red-500">*</span>}</label>
-                </td>
-                <td className="py-3 px-4 w-[35%]">{input2}</td>
-            </>
-        ) : (
-            <>
-                <td className="py-3 px-4 bg-gray-100/50 w-[15%] align-middle">
-                    <label className="text-xs font-bold text-gray-700 uppercase tracking-tight">{label1} {required1 && <span className="text-red-500">*</span>}</label>
-                </td>
-                <td className="py-3 px-4" colSpan={3}>{input1}</td>
-            </>
-        )}
-    </tr>
+const SectionHeader = ({ icon: Icon, title, subtitle }) => (
+    <div className="flex items-center gap-3 mb-6 pb-2 border-b border-gray-100">
+        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <Icon size={18} />
+        </div>
+        <div>
+            <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">{title}</h3>
+            {subtitle && <p className="text-xs text-gray-400 font-medium">{subtitle}</p>}
+        </div>
+    </div>
+);
+
+const InputGroup = ({ label, required, children, className = "" }) => (
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+        <label className="text-xs font-bold text-gray-600 uppercase tracking-tight flex items-center gap-1">
+            {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        {children}
+    </div>
 );
 
 const AddMemberForm = ({ onSave, isSubmitting }) => {
     // Initial state
+    const [isTerminationOpen, setIsTerminationOpen] = useState(false);
     const [formData, setFormData] = useState({
         no_anggota: '',
         join_date: new Date().toISOString().split('T')[0],
@@ -145,173 +143,175 @@ const AddMemberForm = ({ onSave, isSubmitting }) => {
         onSave(formData);
     };
 
-    const inputClasses = "w-full px-3 py-2 bg-white border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-sm";
-    const selectClasses = "w-full px-3 py-2 bg-white border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23000000%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:0.7em] bg-no-repeat bg-[right_0.7em_center] pr-8";
+    const inputClasses = "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-gray-400 hover:bg-white hover:border-gray-300";
+    const selectClasses = "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all appearance-none cursor-pointer hover:bg-white hover:border-gray-300";
 
     return (
-        <form onSubmit={handleSubmit}>
-            <table className="w-full text-sm">
-                <tbody>
-                    <FormRow
-                        label1="No. Anggota" required1
-                        input1={<input name="no_anggota" value={formData.no_anggota} onChange={handleChange} className={`${inputClasses} bg-gray-50 font-mono font-bold text-blue-700`} placeholder="Auto Generated" readOnly />}
-                        label2="Tgl. Masuk" required2
-                        input2={<input type="date" name="join_date" value={formData.join_date} onChange={handleChange} className={inputClasses} />}
-                    />
-                    <FormRow
-                        label1="Nama Lengkap" required1
-                        input1={<input name="full_name" value={formData.full_name} onChange={handleChange} className={inputClasses} />}
-                        label2="Status Simp. Anggota" required2
-                        input2={
-                            <select name="status_simp_anggota" value={formData.status_simp_anggota} onChange={handleChange} className={selectClasses}>
-                                <option value="AKTIF">AKTIF</option>
-                                <option value="NON-AKTIF">NON-AKTIF</option>
-                            </select>
-                        }
-                    />
-                    <FormRow
-                        label1="NPP"
-                        input1={<input name="no_npp" value={formData.no_npp} onChange={handleChange} className={inputClasses} />}
-                        label2="Unit Kerja"
-                        input2={
-                            <select name="work_unit" value={formData.work_unit} onChange={handleChange} className={selectClasses}>
-                                <option value="">Pilih Unit Kerja</option>
-                                {options.units.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                        }
-                    />
-                    <FormRow
-                        label1="Jabatan"
-                        input1={
-                            <select name="jabatan" value={formData.jabatan} onChange={handleChange} className={selectClasses}>
-                                <option value="">Pilih Jabatan</option>
-                                {options.positions.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                        }
-                        label2=""
-                        input2={<div className="bg-gray-50 h-full rounded opacity-50"></div>}
-                    />
-                    <FormRow
-                        label1="PT" required1
-                        input1={
-                            <select name="company" value={formData.company} onChange={handleChange} className={selectClasses}>
-                                <option value="">Pilih PT</option>
-                                {options.companies.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        }
-                        label2="OPS"
-                        input2={
-                            <select name="ops" value={formData.ops} onChange={handleChange} className={selectClasses}>
-                                <option value="">Pilih Ops</option>
-                                {options.ops.map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                        }
-                    />
-                    <FormRow
-                        label1="Lokasi"
-                        input1={
-                            <select name="lokasi" value={formData.lokasi} onChange={handleChange} className={selectClasses}>
-                                <option value="">Pilih Lokasi</option>
-                                {options.locations.map(l => <option key={l} value={l}>{l}</option>)}
-                            </select>
-                        }
-                        label2="Tagihan Parkir"
-                        input2={
-                            <select name="tagihan_parkir" value={formData.tagihan_parkir} onChange={handleChange} className={selectClasses}>
-                                <option value="N">N</option>
-                                <option value="Y">Y</option>
-                            </select>
-                        }
-                    />
-                    <FormRow
-                        label1="Tempat Lahir"
-                        input1={<input name="tempat_lahir" value={formData.tempat_lahir} onChange={handleChange} className={inputClasses} />}
-                        label2="Tgl. Lahir"
-                        input2={<input type="date" name="tanggal_lahir" value={formData.tanggal_lahir} onChange={handleChange} className={inputClasses} />}
-                    />
-                    <FormRow
-                        label1="Alamat"
-                        input1={<textarea name="address" value={formData.address} onChange={handleChange} className={inputClasses} rows={2} />}
-                        label2="Alamat Tinggal"
-                        input2={<textarea name="alamat_tinggal" value={formData.alamat_tinggal} onChange={handleChange} className={inputClasses} rows={2} />}
-                    />
-                    <FormRow
-                        label1="No. KTP/SIM"
-                        input1={<input name="no_ktp" value={formData.no_ktp} onChange={handleChange} className={inputClasses} />}
-                        label2="No. Telp Rumah 1 / 2"
-                        input2={
-                            <div className="flex gap-2">
-                                <input name="telp_rumah_1" value={formData.telp_rumah_1} onChange={handleChange} className={inputClasses} placeholder="Telp 1" />
-                                <span className="self-center text-gray-400">/</span>
-                                <input name="telp_rumah_2" value={formData.telp_rumah_2} onChange={handleChange} className={inputClasses} placeholder="Telp 2" />
-                            </div>
-                        }
-                    />
-                    <FormRow
-                        label1="Email"
-                        input1={<input type="email" name="email" value={formData.email} onChange={handleChange} className={inputClasses} />}
-                        label2="No. Hp 1 / 2"
-                        input2={
-                            <div className="flex gap-2">
-                                <input name="hp_1" value={formData.hp_1} onChange={handleChange} className={inputClasses} placeholder="HP 1" />
-                                <span className="self-center text-gray-400">/</span>
-                                <input name="hp_2" value={formData.hp_2} onChange={handleChange} className={inputClasses} placeholder="HP 2" />
-                            </div>
-                        }
-                    />
-                    <FormRow
-                        label1="No. Rek. Pribadi"
-                        input1={<input name="rek_pribadi" value={formData.rek_pribadi} onChange={handleChange} className={inputClasses} />}
-                        label2="No. Rek. Gaji / Data Bank"
-                        input2={
-                            <div className="flex gap-2">
-                                <input name="rek_gaji" value={formData.rek_gaji} onChange={handleChange} className={inputClasses} placeholder="No Rekening" />
-                                <span className="self-center text-gray-400">/</span>
-                                <select name="bank_gaji" value={formData.bank_gaji} onChange={handleChange} className={`${selectClasses} w-32`}>
-                                    <option value="">Bank</option>
-                                    {options.banks.map(b => <option key={b} value={b}>{b}</option>)}
-                                </select>
-                            </div>
-                        }
-                    />
-                    <FormRow
-                        label1="Jenis Kelamin"
-                        input1={
-                            <select name="jenis_kelamin" value={formData.jenis_kelamin} onChange={handleChange} className={selectClasses}>
-                                <option value="Laki-laki">Laki-laki</option>
-                                <option value="Perempuan">Perempuan</option>
-                            </select>
-                        }
-                        label2="Last Update"
-                        input2={<input disabled value={formData.last_update} className={`${inputClasses} bg-gray-100/50 text-gray-500`} />}
-                    />
-                    <FormRow
-                        label1={<span className="text-red-600">Keluar Anggota ? (Y/N)</span>}
-                        input1={
-                            <select name="keluar_anggota" value={formData.keluar_anggota} onChange={handleChange} className={selectClasses}>
-                                <option value="N">N</option>
-                                <option value="Y">Y</option>
-                            </select>
-                        }
-                        label2="Tgl. Keluar"
-                        input2={<input type="date" name="tanggal_keluar" value={formData.tanggal_keluar} onChange={handleChange} className={inputClasses} />}
-                    />
-                    <FormRow
-                        label1="Sebab Keluar"
-                        input1={<input name="sebab_keluar" value={formData.sebab_keluar} onChange={handleChange} className={inputClasses} />}
-                        label2="Keterangan"
-                        input2={<input name="keterangan" value={formData.keterangan} onChange={handleChange} className={inputClasses} />}
-                    />
-                </tbody>
-            </table>
+        <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-8">
 
-            <div className="p-6 flex justify-center bg-gray-50 border-t border-gray-200 mt-4">
+            {/* SECTION 1: IDENTITAS UTAMA */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 opacity-50"></div>
+                <SectionHeader icon={BadgeCheck} title="Identitas Keanggotaan" subtitle="Nomor anggota & status kepesertaan" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <InputGroup label="Nomor Anggota" required>
+                        <div className="relative">
+                            <input
+                                name="no_anggota"
+                                value={formData.no_anggota}
+                                onChange={handleChange}
+                                className={`${inputClasses} bg-emerald-50/50 border-emerald-200 text-emerald-700 font-bold font-mono`}
+                                placeholder="Auto Generated"
+                                readOnly
+                            />
+                            <div className="absolute right-3 top-2.5 text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">AUTO</div>
+                        </div>
+                    </InputGroup>
+                    <InputGroup label="Tanggal Masuk" required>
+                        <input type="date" name="join_date" value={formData.join_date} onChange={handleChange} className={inputClasses} />
+                    </InputGroup>
+                </div>
+            </div>
+
+            {/* SECTION 2: DATA PRIBADI */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <SectionHeader icon={User} title="Data Pribadi" subtitle="Informasi lengkap personal anggota" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <InputGroup label="Nama Lengkap" required className="md:col-span-2">
+                        <input name="full_name" value={formData.full_name} onChange={handleChange} className={inputClasses} placeholder="Sesuai KTP" />
+                    </InputGroup>
+                    <InputGroup label="NIK (KTP)" required>
+                        <input name="no_ktp" value={formData.no_ktp} onChange={handleChange} className={inputClasses} placeholder="16 Digit NIK" />
+                    </InputGroup>
+                    <InputGroup label="Jenis Kelamin">
+                        <select name="jenis_kelamin" value={formData.jenis_kelamin} onChange={handleChange} className={selectClasses}>
+                            <option value="Laki-laki">Laki-laki</option>
+                            <option value="Perempuan">Perempuan</option>
+                        </select>
+                    </InputGroup>
+
+                    <InputGroup label="Tempat Lahir">
+                        <input name="tempat_lahir" value={formData.tempat_lahir} onChange={handleChange} className={inputClasses} />
+                    </InputGroup>
+                    <InputGroup label="Tanggal Lahir">
+                        <input type="date" name="tanggal_lahir" value={formData.tanggal_lahir} onChange={handleChange} className={inputClasses} />
+                    </InputGroup>
+                    <InputGroup label="Alamat KTP" className="md:col-span-2">
+                        <textarea name="address" value={formData.address} onChange={handleChange} className={inputClasses} rows={1} placeholder="Alamat lengkap..." />
+                    </InputGroup>
+                    <InputGroup label="Alamat Domisili" className="md:col-span-2 md:col-start-3">
+                        <textarea name="alamat_tinggal" value={formData.alamat_tinggal} onChange={handleChange} className={inputClasses} rows={1} placeholder="Jika berbeda dengan KTP..." />
+                    </InputGroup>
+                </div>
+            </div>
+
+            {/* SECTION 3: PEKERJAAN */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <SectionHeader icon={Briefcase} title="Pekerjaan & Penempatan" subtitle="Detail unit kerja dan posisi" />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <InputGroup label="NPP (Nomor Pegawai)">
+                        <input name="no_npp" value={formData.no_npp} onChange={handleChange} className={inputClasses} placeholder="NPP Perusahaan" />
+                    </InputGroup>
+                    <InputGroup label="Perusahaan (PT)" required>
+                        <select name="company" value={formData.company} onChange={handleChange} className={selectClasses}>
+                            <option value="">Pilih Perusahaan</option>
+                            {options.companies.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="Unit Kerja">
+                        <select name="work_unit" value={formData.work_unit} onChange={handleChange} className={selectClasses}>
+                            <option value="">Pilih Unit Kerja</option>
+                            {options.units.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="Jabatan">
+                        <select name="jabatan" value={formData.jabatan} onChange={handleChange} className={selectClasses}>
+                            <option value="">Pilih Jabatan</option>
+                            {options.positions.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="Area OPS">
+                        <select name="ops" value={formData.ops} onChange={handleChange} className={selectClasses}>
+                            <option value="">Pilih Ops</option>
+                            {options.ops.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="Lokasi Kerja">
+                        <select name="lokasi" value={formData.lokasi} onChange={handleChange} className={selectClasses}>
+                            <option value="">Pilih Lokasi</option>
+                            {options.locations.map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                    </InputGroup>
+                </div>
+            </div>
+
+            {/* SECTION 4: KONTAK & KEUANGAN (Split 2 cols) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col">
+                    <SectionHeader icon={Phone} title="Kontak Anggota" subtitle="Nomor telepon & email" />
+                    <div className="space-y-4 flex-1">
+                        <InputGroup label="Email">
+                            <input type="email" name="email" value={formData.email} onChange={handleChange} className={inputClasses} placeholder="email@contoh.com" />
+                        </InputGroup>
+                        <div className="grid grid-cols-2 gap-4">
+                            <InputGroup label="No. HP 1">
+                                <input name="hp_1" value={formData.hp_1} onChange={handleChange} className={inputClasses} placeholder="08..." />
+                            </InputGroup>
+                            <InputGroup label="No. HP 2">
+                                <input name="hp_2" value={formData.hp_2} onChange={handleChange} className={inputClasses} placeholder="Optional" />
+                            </InputGroup>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <InputGroup label="Telp Rumah 1">
+                                <input name="telp_rumah_1" value={formData.telp_rumah_1} onChange={handleChange} className={inputClasses} />
+                            </InputGroup>
+                            <InputGroup label="Telp Rumah 2">
+                                <input name="telp_rumah_2" value={formData.telp_rumah_2} onChange={handleChange} className={inputClasses} />
+                            </InputGroup>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col">
+                    <SectionHeader icon={CreditCard} title="Data Keuangan" subtitle="Informasi rekening & payroll" />
+                    <div className="space-y-4 flex-1">
+                        <InputGroup label="Bank Payroll">
+                            <select name="bank_gaji" value={formData.bank_gaji} onChange={handleChange} className={selectClasses}>
+                                <option value="">Pilih Bank</option>
+                                <option value="BNI 46">BNI 46</option>
+                                <option value="BCA">BCA</option>
+                                <option value="MANDIRI">MANDIRI</option>
+                                <option value="BRI">BRI</option>
+                            </select>
+                        </InputGroup>
+                        <InputGroup label="No. Rekening Gaji">
+                            <input name="rek_gaji" value={formData.rek_gaji} onChange={handleChange} className={inputClasses} placeholder="Nomor Rekening Payroll" />
+                        </InputGroup>
+                        <InputGroup label="No. Rekening Pribadi">
+                            <input name="rek_pribadi" value={formData.rek_pribadi} onChange={handleChange} className={inputClasses} placeholder="Nomor Rekening Lainnya" />
+                        </InputGroup>
+                        <InputGroup label="Potongan Parkir?" className="w-1/2">
+                            <select name="tagihan_parkir" value={formData.tagihan_parkir} onChange={handleChange} className={selectClasses}>
+                                <option value="N">Tidak</option>
+                                <option value="Y">Ya</option>
+                            </select>
+                        </InputGroup>
+                    </div>
+                </div>
+            </div>
+
+            {/* SECTION 5 REMOVED */}
+
+            <div className="flex justify-end pt-6 border-t border-gray-100">
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-green-600 text-white font-bold uppercase tracking-widest py-3 px-12 rounded-full shadow-lg shadow-green-200 hover:bg-green-700 disabled:opacity-50 transition-all flex items-center gap-2 transform hover:scale-105"
+                    className="bg-emerald-600 text-white font-bold uppercase tracking-widest py-4 px-8 rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:shadow-emerald-300 disabled:opacity-70 disabled:cursor-not-allowed transition-all flex items-center gap-3 transform hover:-translate-y-1"
                 >
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'Simpan'}
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'Simpan Data Anggota'}
                 </button>
             </div>
         </form>

@@ -49,7 +49,8 @@ const Overview = () => {
     const containerRef = useRef(null);
     const [simpananTotal, setSimpananTotal] = useState(0);
     const [pinjamanActive, setPinjamanActive] = useState(0);
-    const [sisaAngsuran, setSisaAngsuran] = useState(0);
+    const [nextInstallment, setNextInstallment] = useState(0);
+    const [nextDueDate, setNextDueDate] = useState(null);
 
     const [hasSimpanan, setHasSimpanan] = useState(false);
     const [hasPinjaman, setHasPinjaman] = useState(false);
@@ -152,15 +153,26 @@ const Overview = () => {
                         .in('pinjaman_id', pinjamanIds);
 
                     if (angsuranData) {
-                        // Sort by date/month for chart if needed, or simple calc
-                        const unpaidItems = angsuranData.filter(a => a.status !== 'PAID');
+                        const unpaidItems = angsuranData
+                            .filter(a => a.status !== 'PAID')
+                            .sort((a, b) => new Date(a.tanggal_bayar) - new Date(b.tanggal_bayar));
+                        
+                        if (unpaidItems.length > 0) {
+                            const nextItem = unpaidItems[0];
+                            setNextInstallment(parseFloat(nextItem.amount));
+                            const date = new Date(nextItem.tanggal_bayar);
+                            setNextDueDate(date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }));
+                        } else {
+                            setNextInstallment(0);
+                            setNextDueDate(null);
+                        }
+
+                        // Calculate total unpaid for chart if needed, or just specific logic
                         unpaidItems.forEach(a => totalUnpaidInstallments += parseFloat(a.amount));
                     }
 
-                    setSisaAngsuran(totalUnpaidInstallments);
 
-                    // Mock chart for pinjaman (or visualizing remaining balance over months)
-                    // For simplicity, just showing simple data points corresponding to current totals
+                    // Mock chart for pinjaman
                     setPinjamanChartData([
                         { name: 'Pokok', sisa: totalPinjaman },
                         { name: 'Sisa', sisa: totalUnpaidInstallments }
@@ -235,9 +247,9 @@ const Overview = () => {
                     type="primary"
                 />
                 <Card
-                    title="Sisa Angsuran"
-                    value={formatCurrency(sisaAngsuran)}
-                    subtext="Total sisa tagihan pinjaman"
+                    title="Angsuran yang mendatang"
+                    value={formatCurrency(nextInstallment)}
+                    subtext={nextDueDate ? `Jatuh tempo: ${nextDueDate}` : "Tidak ada tagihan mendatang"}
                     icon={<AlertCircle size={24} />}
                     type="warning"
                 />

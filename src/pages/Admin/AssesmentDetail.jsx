@@ -480,7 +480,7 @@ const AssesmentDetail = () => {
                         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4 sticky top-24">
                             <button
                                 onClick={() => generateLoanAnalysisPDF(loan, false, analystName, {
-                                    amount: parseFloat(editingAmount),
+                                    amount: parseFloat(editingAmount.toString().replace(/\./g, '')),
                                     useInterest: useInterest,
                                     interestType: interestType,
                                     interestValue: parseFloat(interestValue)
