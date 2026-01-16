@@ -1,30 +1,10 @@
 import React from 'react';
 import { Clock, Wallet } from 'lucide-react';
 
-const InstallmentSummary = ({ loan, installments, userLoans, formatCurrency, navigate, selectedInstallments = [], onToggleInstallment, onToggleAllInstallments }) => {
+const InstallmentSummary = ({ loan, installments, userLoans, formatCurrency, selectedInstallments = [], onToggleInstallment, onToggleAllInstallments }) => {
     if (!loan) return null;
 
     const loanId = loan.id;
-
-    // Helper untuk hitung pokok dari sebuah angsuran
-    const calculatePrincipal = (inst) => {
-        const amount = parseFloat(inst.amount);
-        const l = inst.pinjaman;
-        if (!l) return 0;
-
-        let monthlyInterest = 0;
-        const principal = parseFloat(l.jumlah_pinjaman || 0);
-        const tenor = l.tenor_bulan || 1;
-
-        if (l.tipe_bunga === 'PERSENAN') {
-            const annualRate = parseFloat(l.nilai_bunga || 0);
-            monthlyInterest = (principal * (annualRate / 100)) / 12;
-        } else if (l.tipe_bunga === 'NOMINAL') {
-            monthlyInterest = parseFloat(l.nilai_bunga || 0) / tenor;
-        }
-        return amount - monthlyInterest;
-    };
-
     // Stats untuk PINJAMAN SAAT INI (Current Loan)
     const currentInstallments = installments.filter(i => i.pinjaman_id === loanId);
     const hasCurrentInstallments = currentInstallments.length > 0;
@@ -40,6 +20,10 @@ const InstallmentSummary = ({ loan, installments, userLoans, formatCurrency, nav
     const netDisbursement = parseFloat(loan.jumlah_pinjaman) - totalDeduction;
 
     const otherLoans = userLoans.filter(l => l.id !== loanId && l.status === 'DICAIRKAN');
+    const resolvedOtherLoans = otherLoans.filter(l => {
+        const paidCount = installments.filter(i => i.pinjaman_id === l.id && i.status === 'PAID').length;
+        return paidCount < (l.tenor_bulan || 0);
+    });
 
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden text-left">
@@ -95,20 +79,33 @@ const InstallmentSummary = ({ loan, installments, userLoans, formatCurrency, nav
                 )}
 
                 {/* Pinjaman & Angsuran Lain */}
-                {otherLoans.length > 0 && (
+                {resolvedOtherLoans.length > 0 && (
                     <div className="space-y-4">
                         <p className="text-[10px] font-black text-gray-400 uppercase italic tracking-widest px-1">
                             Bayar Angsuran Berjalan (Potong Pencairan)
                         </p>
                         <div className="grid grid-cols-1 gap-4">
-                            {otherLoans.map((ol) => {
+                            {resolvedOtherLoans.map((ol) => {
                                 const olInstallments = installments.filter(i => i.pinjaman_id === ol.id);
-                                const unpaidOlInstallments = olInstallments.filter(i => i.status === 'UNPAID');
+                                const paidOlInstallments = olInstallments.filter(i => i.status === 'PAID');
+                                const unpaidOlInstallments = olInstallments.filter(i => i.status !== 'PAID');
 
-                                if (unpaidOlInstallments.length === 0) return null;
+                                const tenor = ol.tenor_bulan || 1;
+                                const paidCount = paidOlInstallments.length;
+                                const unpaidCount = Math.max(tenor - paidCount, 0);
 
-                                const allSelected = unpaidOlInstallments.every(ui => selectedInstallments.some(si => si.id === ui.id));
-                                const someSelected = unpaidOlInstallments.some(ui => selectedInstallments.some(si => si.id === ui.id));
+                                const principal = parseFloat(ol.jumlah_pinjaman || 0);
+                                let totalBunga = 0;
+                                if (ol.tipe_bunga === 'PERSENAN') {
+                                    totalBunga = principal * (parseFloat(ol.nilai_bunga || 0) / 100) * (tenor / 12);
+                                } else if (ol.tipe_bunga === 'NOMINAL') {
+                                    totalBunga = parseFloat(ol.nilai_bunga || 0);
+                                }
+
+                                const outstandingPokok = Math.round((principal / tenor) * unpaidCount);
+                                const outstandingBunga = Math.round((totalBunga / tenor) * unpaidCount);
+
+                                const allSelected = unpaidOlInstallments.length > 0 && unpaidOlInstallments.every(ui => selectedInstallments.some(si => si.id === ui.id));
 
                                 return (
                                     <div key={ol.id} className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
@@ -119,41 +116,60 @@ const InstallmentSummary = ({ loan, installments, userLoans, formatCurrency, nav
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] font-black text-gray-900 uppercase italic leading-none">{ol.no_pinjaman}</p>
-                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter italic">Sisa: {unpaidOlInstallments.length} Bulan</p>
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter italic">Terbayar: {paidCount} / {tenor} • Sisa: {unpaidCount} Bulan</p>
                                                 </div>
                                             </div>
-                                            <button
-                                                onClick={() => onToggleAllInstallments(ol.id, unpaidOlInstallments)}
-                                                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${allSelected ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-100 hover:bg-blue-50'
-                                                    }`}
-                                            >
-                                                {allSelected ? 'Batal Semua' : 'Pilih Semua'}
-                                            </button>
+                                            {unpaidOlInstallments.length > 0 && (
+                                                <button
+                                                    onClick={() => onToggleAllInstallments(ol.id, unpaidOlInstallments)}
+                                                    className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${allSelected ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-100 hover:bg-blue-50'
+                                                        }`}
+                                                >
+                                                    {allSelected ? 'Batal Semua' : 'Pilih Semua'}
+                                                </button>
+                                            )}
                                         </div>
 
-                                        <div className="p-2 divide-y divide-gray-100 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200">
-                                            {unpaidOlInstallments.map((inst) => {
-                                                const isSelected = selectedInstallments.some(si => si.id === inst.id);
-                                                return (
-                                                    <div
-                                                        key={inst.id}
-                                                        className={`p-3 flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'
-                                                            }`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isSelected}
-                                                                onChange={() => onToggleInstallment(inst)}
-                                                                className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                            />
-                                                            <span className="text-[10px] font-bold text-gray-600 uppercase italic">Bulan Ke-{inst.bulan_ke}</span>
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-blue-700 italic">{formatCurrency(inst.amount)}</span>
-                                                    </div>
-                                                );
-                                            })}
+                                        <div className="px-4 py-3 bg-white border-b border-gray-100">
+                                            <div className="flex items-center justify-between text-[10px] font-black uppercase italic text-gray-500">
+                                                <span>Outstanding Pokok</span>
+                                                <span className="text-red-500">{outstandingPokok > 0 ? formatCurrency(outstandingPokok) : '-'}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-[10px] font-black uppercase italic text-gray-500 mt-1">
+                                                <span>Outstanding Bunga</span>
+                                                <span className="text-red-400">{outstandingBunga > 0 ? formatCurrency(outstandingBunga) : '-'}</span>
+                                            </div>
                                         </div>
+
+                                        {unpaidOlInstallments.length > 0 ? (
+                                            <div className="p-2 divide-y divide-gray-100 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200">
+                                                {unpaidOlInstallments.map((inst) => {
+                                                    const isSelected = selectedInstallments.some(si => si.id === inst.id);
+                                                    return (
+                                                        <div
+                                                            key={inst.id}
+                                                            className={`p-3 flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'
+                                                                }`}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => onToggleInstallment(inst)}
+                                                                    className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                                />
+                                                                <span className="text-[10px] font-bold text-gray-600 uppercase italic">Bulan Ke-{inst.bulan_ke}</span>
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-blue-700 italic">{formatCurrency(inst.amount)}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 text-center text-[10px] font-bold text-gray-400 italic">
+                                                Semua angsuran sudah lunas.
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}

@@ -73,59 +73,43 @@ export const generateLoanAnalysisPDF = async (loan, isDownload = false, analystN
 
     if (activeLoans) {
         for (const al of activeLoans) {
-            // Calculate outstanding based on UNPAID installments matching Realisasi logic
-            const { data: unpaidInsts } = await supabase
+            // Fetch all installments to calculate paid/unpaid counts
+            const { data: loanInstallments } = await supabase
                 .from('angsuran')
                 .select('*')
-                .eq('pinjaman_id', al.id)
-                .eq('status', 'UNPAID');
+                .eq('pinjaman_id', al.id);
 
-            if (unpaidInsts && unpaidInsts.length > 0) {
-                const principal = parseFloat(al.jumlah_pinjaman);
-                const tenor = al.tenor_bulan;
+            const principal = parseFloat(al.jumlah_pinjaman || 0);
+            const tenor = al.tenor_bulan || 1;
 
-                // Calculate paid count from total tenor - unpaid length
-                const paidCount = tenor - unpaidInsts.length;
+            const paidCount = (loanInstallments || []).filter(inst => inst.status === 'PAID').length;
+            const unpaidCount = Math.max(tenor - paidCount, 0);
 
-                let oPokok = 0;
-                let oBunga = 0;
-
-                // Calculate total interest per loan for rate calculation
-                let totalInterestLoan = 0;
-                if (al.tipe_bunga === 'PERSENAN') {
-                    totalInterestLoan = principal * (parseFloat(al.nilai_bunga || 0) / 100) * (tenor / 12);
-                } else if (al.tipe_bunga === 'NOMINAL') {
-                    totalInterestLoan = parseFloat(al.nilai_bunga || 0);
-                }
-
-                // Sum up outstanding from unpaid installments
-                // Logic derived from RealisasiKaryawan:
-                // oBunga += (totalInterestLoan / tenor)
-                // oPokok += (principal / tenor)
-                unpaidInsts.forEach(() => {
-                    oBunga += (totalInterestLoan / tenor);
-                    oPokok += (principal / tenor);
-                });
-
-                const totalBayar = principal + totalInterestLoan;
-                const angBln = Math.ceil(totalBayar / tenor);
-
-                const remPrincipal = oPokok;
-                const remBunga = oBunga;
-
-                outstandingData.push([
-                    al.no_pinjaman,
-                    (al.jenis_pinjaman || 'BIASA').toUpperCase(),
-                    `${paidCount}/${tenor}`,
-                    Math.round(remPrincipal).toLocaleString('id-ID'),
-                    Math.round(remBunga).toLocaleString('id-ID'),
-                    angBln.toLocaleString('id-ID')
-                ]);
-
-                grandOutstanding += remPrincipal;
-                grandBunga += remBunga;
-                grandAngBln += angBln;
+            let totalInterestLoan = 0;
+            if (al.tipe_bunga === 'PERSENAN') {
+                totalInterestLoan = principal * (parseFloat(al.nilai_bunga || 0) / 100) * (tenor / 12);
+            } else if (al.tipe_bunga === 'NOMINAL') {
+                totalInterestLoan = parseFloat(al.nilai_bunga || 0);
             }
+
+            const remPrincipal = (principal / tenor) * unpaidCount;
+            const remBunga = (totalInterestLoan / tenor) * unpaidCount;
+
+            const totalBayar = principal + totalInterestLoan;
+            const angBln = Math.ceil(totalBayar / tenor);
+
+            outstandingData.push([
+                al.no_pinjaman,
+                (al.jenis_pinjaman || 'BIASA').toUpperCase(),
+                `${paidCount}/${tenor}`,
+                Math.round(remPrincipal).toLocaleString('id-ID'),
+                Math.round(remBunga).toLocaleString('id-ID'),
+                angBln.toLocaleString('id-ID')
+            ]);
+
+            grandOutstanding += remPrincipal;
+            grandBunga += remBunga;
+            grandAngBln += angBln;
         }
     }
 

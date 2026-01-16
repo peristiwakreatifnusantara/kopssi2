@@ -395,7 +395,6 @@ const LoanDetail = () => {
                         installments={installments}
                         userLoans={userLoans}
                         formatCurrency={formatCurrency}
-                        navigate={navigate}
                         selectedInstallments={selectedInstallments}
                         onToggleInstallment={handleToggleInstallment}
                         onToggleAllInstallments={handleToggleAllInstallments}
